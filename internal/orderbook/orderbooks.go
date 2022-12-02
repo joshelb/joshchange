@@ -2,9 +2,11 @@ package orderbook
 
 import (
 	"sync"
+	"context"
 
-	ob "github.com/muzykantov/orderbook"
+	ob "github.com/joshelb/orderbook"
 	"github.com/rs/xid"
+	"github.com/go-redis/redis/v8"
 	"github.com/shopspring/decimal"
 	logg "github.com/sirupsen/logrus"
 )
@@ -18,32 +20,47 @@ type Order struct {
 }
 
 type Orderbookcollection struct {
-	sync.Map
+	Map sync.Map
+	RedisClient *redis.Client
 }
 
 func (o *Orderbookcollection) InitOrderbook(symbol string) {
-	o.Store(symbol, ob.NewOrderBook())
-	o.Store("hhh", "rage")
-	logg.Info(o.Load("btcusd"))
+	o.Map.Store(symbol, ob.NewOrderBook())
+	o.Map.Store("hhh", "rage")
+	logg.Info(o.Map.Load("btcusd"))
 	logg.Info("Initialized Orderbook for Symbol %s", symbol)
 }
 
 func (o Orderbookcollection) Marketorder(obj Order) {
+	var ctx = context.Background()
 	orderBook, err := o.GetOrderbook_bySymbol(obj.Symbol)
 	if err != nil {
-		logg.Info(err)
+		logg.Error(err)
 	}
 	if obj.Side == "sell" {
+		curPrice, errr := orderBook.CalculatePriceAfterExecution(ob.Sell,decimal.NewFromFloat(obj.Quantity))
+		logg.Info(errr)
 		_, _, _, _, err := orderBook.ProcessMarketOrder(ob.Sell, decimal.NewFromFloat(obj.Quantity))
+		if err != nil {
+			logg.Error(err)
+		}
+		err = o.RedisClient.Set(ctx, "curPrice", curPrice.String(), 0).Err()
 		if err != nil {
 			logg.Error(err)
 		}
 	}
 	if obj.Side == "buy" {
+		curPrice, errr := orderBook.CalculatePriceAfterExecution(ob.Buy,decimal.NewFromFloat(obj.Quantity))
+		logg.Info(errr)
 		_, _, _, _, err := orderBook.ProcessMarketOrder(ob.Buy, decimal.NewFromFloat(obj.Quantity))
 		if err != nil {
 			logg.Error(err)
 		}
+		logg.Info(curPrice)
+		err = o.RedisClient.Set(ctx, "curPrice", curPrice.String(), 0).Err()
+	  if err != nil {
+	    logg.Error(err)
+	  }
 	}
 }
 

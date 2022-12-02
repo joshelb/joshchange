@@ -15,6 +15,10 @@ type Embed struct {
 	Collection *orderbook.Orderbookcollection
 }
 
+func enableCors(w *http.ResponseWriter) {
+(*w).Header().Set("Access-Control-Allow-Origin", "*")
+}
+
 func (e Embed) OrderHandler(writer http.ResponseWriter, r *http.Request) {
 	writer.Header().Set("Content-Type", "application/json")
 	writer.WriteHeader(http.StatusOK)
@@ -30,10 +34,11 @@ func (e Embed) OrderHandler(writer http.ResponseWriter, r *http.Request) {
 	if order.Ordertype == "limit" {
 		e.Collection.Limitorder(order)
 	}
-	logg.Info(e.Collection.Load("btcusd"))
+	logg.Info(e.Collection.Map.Load("btcusd"))
 }
 
 func (e Embed) OrderbookHandler(writer http.ResponseWriter, r *http.Request) {
+	enableCors(&writer)
 	vars := mux.Vars(r)
 	symbol := vars["symbol"]
 	orderBook, err := e.Collection.GetOrderbook_bySymbol(symbol)
