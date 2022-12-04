@@ -1,12 +1,13 @@
 package orderbook
 
 import (
+	"fmt"
 	"sync"
-	"context"
+	"time"
 
 	ob "github.com/joshelb/orderbook"
+	"github.com/roistat/go-clickhouse"
 	"github.com/rs/xid"
-	"github.com/go-redis/redis/v8"
 	"github.com/shopspring/decimal"
 	logg "github.com/sirupsen/logrus"
 )
@@ -20,8 +21,8 @@ type Order struct {
 }
 
 type Orderbookcollection struct {
-	Map sync.Map
-	RedisClient *redis.Client
+	Map              sync.Map
+	ClickhouseClient *clickhouse.Conn
 }
 
 func (o *Orderbookcollection) InitOrderbook(symbol string) {
@@ -32,35 +33,43 @@ func (o *Orderbookcollection) InitOrderbook(symbol string) {
 }
 
 func (o Orderbookcollection) Marketorder(obj Order) {
-	var ctx = context.Background()
 	orderBook, err := o.GetOrderbook_bySymbol(obj.Symbol)
 	if err != nil {
 		logg.Error(err)
 	}
 	if obj.Side == "sell" {
-		curPrice, errr := orderBook.CalculatePriceAfterExecution(ob.Sell,decimal.NewFromFloat(obj.Quantity))
-		logg.Info(errr)
-		_, _, _, _, err := orderBook.ProcessMarketOrder(ob.Sell, decimal.NewFromFloat(obj.Quantity))
+		curPrice, err := orderBook.CalculatePriceAfterExecution(ob.Sell, decimal.NewFromFloat(obj.Quantity))
 		if err != nil {
 			logg.Error(err)
 		}
-		err = o.RedisClient.Set(ctx, "curPrice", curPrice.String(), 0).Err()
+		_, _, _, _, err = orderBook.ProcessMarketOrder(ob.Sell, decimal.NewFromFloat(obj.Quantity))
+		if err != nil {
+			logg.Error(err)
+		}
+		unix_timestamp := time.Now().Unix()
+		Price, _ := curPrice.Float64()
+		q := clickhouse.NewQuery(fmt.Sprintf("INSERT INTO tickdata.%s VALUES (%d,%s,%s,'sell')", obj.Symbol, int(unix_timestamp), fmt.Sprintf("%f", obj.Quantity), fmt.Sprintf("%f", Price)))
+		err = q.Exec(o.ClickhouseClient)
 		if err != nil {
 			logg.Error(err)
 		}
 	}
 	if obj.Side == "buy" {
-		curPrice, errr := orderBook.CalculatePriceAfterExecution(ob.Buy,decimal.NewFromFloat(obj.Quantity))
-		logg.Info(errr)
-		_, _, _, _, err := orderBook.ProcessMarketOrder(ob.Buy, decimal.NewFromFloat(obj.Quantity))
+		curPrice, err := orderBook.CalculatePriceAfterExecution(ob.Buy, decimal.NewFromFloat(obj.Quantity))
 		if err != nil {
 			logg.Error(err)
 		}
-		logg.Info(curPrice)
-		err = o.RedisClient.Set(ctx, "curPrice", curPrice.String(), 0).Err()
-	  if err != nil {
-	    logg.Error(err)
-	  }
+		_, _, _, _, err = orderBook.ProcessMarketOrder(ob.Buy, decimal.NewFromFloat(obj.Quantity))
+		if err != nil {
+			logg.Error(err)
+		}
+		unix_timestamp := time.Now().Unix()
+		Price, _ := curPrice.Float64()
+		q := clickhouse.NewQuery(fmt.Sprintf("INSERT INTO tickdata.%s VALUES (%d,%s,%s,'buy')", obj.Symbol, int(unix_timestamp), fmt.Sprintf("%f", obj.Quantity), fmt.Sprintf("%f", Price)))
+		err = q.Exec(o.ClickhouseClient)
+		if err != nil {
+			logg.Error(err)
+		}
 	}
 }
 

@@ -61,25 +61,25 @@ func main() {
 			log.Fatal(err)
 		}
 	}
-	    values := &Order{
-      Symbol:    "btcusd",
-      Side:      "buy",
-      Ordertype: "market",
-      Quantity:  800,
-      Price:     float64(0)}
+	values := &Order{
+		Symbol:    "btcusd",
+		Side:      "sell",
+		Ordertype: "market",
+		Quantity:  800,
+		Price:     float64(0)}
 
-    json_data, err := json.Marshal(values)
+	json_data, err := json.Marshal(values)
 
-    if err != nil {
-      log.Fatal(err)
-    }
-    var order Order
-    err = json.Unmarshal(json_data, &order)
-    _, err = http.Post("http://localhost:8080/order", "application/json",
-      bytes.NewBuffer(json_data))
+	if err != nil {
+		log.Fatal(err)
+	}
+	var order Order
+	err = json.Unmarshal(json_data, &order)
+	_, err = http.Post("http://localhost:8080/order", "application/json",
+		bytes.NewBuffer(json_data))
 
-    if err != nil {
-      log.Fatal(err)
-    }
+	if err != nil {
+		log.Fatal(err)
+	}
 
 }

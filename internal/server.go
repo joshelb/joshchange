@@ -1,29 +1,20 @@
 package server
 
 import (
-	"net/http"
 	"context"
+	"net/http"
 
 	"github.com/gorilla/mux"
-	"github.com/go-redis/redis/v8"
 	oj "github.com/joshelb/joshchange/internal/orderbook"
+	"github.com/roistat/go-clickhouse"
 	logg "github.com/sirupsen/logrus"
 )
 
 var ctx = context.Background()
 
 func New() {
-
-	rdb := redis.NewClient(&redis.Options{
-		Addr:     "localhost:6379",
-    Password: "",
-    DB:       0,
-  })
-	err := rdb.Set(ctx,"key","NUll",0).Err()
-	if err != nil {
-		logg.Error(err)
-	}
-	collection := &oj.Orderbookcollection{RedisClient: rdb,}
+	conn := clickhouse.NewConn("localhost:8123", clickhouse.NewHttpTransport())
+	collection := &oj.Orderbookcollection{ClickhouseClient: conn}
 	collection.InitOrderbook("btcusd")
 	logg.Info(collection)
 	embed := &Embed{
@@ -37,7 +28,7 @@ func New() {
 	router.HandleFunc("/orderbook/{symbol}", embed.OrderbookHandler).Methods("GET")
 	router.HandleFunc("/trade/{symbol}", TradeHandler)
 
-	err = http.ListenAndServe(":8080", router)
+	err := http.ListenAndServe(":8080", router)
 	if err != nil {
 		logg.Error("There is an error with the Server.")
 	}
