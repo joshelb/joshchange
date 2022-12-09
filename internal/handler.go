@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
+	"github.com/roistat/go-clickhouse"
 	"github.com/joshelb/joshchange/internal/orderbook"
 	logg "github.com/sirupsen/logrus"
 )
@@ -60,3 +61,49 @@ func TradeHandler(writer http.ResponseWriter, r *http.Request) {
 	tmp.Execute(writer, data)
 
 }
+
+func CandlesticksHandler(conn *clickhouse.Conn) http.HandlerFunc {
+	return func(writer http.ResponseWriter, r *http.Request) {
+		enableCors(&writer)
+		vars := mux.Vars(r)
+		symbol := vars["symbol"]
+		timeframe := vars["timeframe"]
+		s := fmt.Sprintf("SELECT * FROM candlesticks.%s%s FINAL",symbol,timeframe)
+		logg.Info(timeframe)
+		q := clickhouse.NewQuery(s)
+		iter := q.Iter(conn)
+		var (
+			timestamp string
+			open string
+			high string
+			low string
+			close string
+			volume string
+		)
+		var table [][]string
+		for iter.Scan(&timestamp,&open,&high,&low,&close,&volume) {
+			row := []string{timestamp,open,high,low,close,volume}
+			table = append(table, row)
+		}
+		if iter.Error() != nil {
+			logg.Error(iter.Error())
+		}
+		res,err := json.Marshal(table)
+		if err != nil {
+			logg.Error(err)
+		}
+		writer.Write(res)
+	}
+}
+
+
+
+
+
+
+
+
+
+
+
+
