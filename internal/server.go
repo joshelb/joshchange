@@ -24,10 +24,10 @@ func New() {
 	router := mux.NewRouter()
 	fs := http.FileServer(http.Dir("./assets/"))
 	router.PathPrefix("/assets/").Handler(http.StripPrefix("/assets/", fs))
-	router.HandleFunc("/order", embed.OrderHandler).Methods("POST")
+	router.HandleFunc("/order", embed.OrderHandler)
 	router.HandleFunc("/orderbook/{symbol}", embed.OrderbookHandler).Methods("GET")
 	router.HandleFunc("/trade/{symbol}", TradeHandler)
-	router.HandleFunc("/candlesticks/{symbol}/{timeframe}",CandlesticksHandler(conn)).Methods("GET")
+	router.HandleFunc("/candlesticks/{symbol}/{timeframe}", CandlesticksHandler(conn)).Methods("GET")
 
 	err := http.ListenAndServe(":8080", router)
 	if err != nil {

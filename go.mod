@@ -12,6 +12,8 @@ require (
 	github.com/sirupsen/logrus v1.9.0
 )
 
+require github.com/gorilla/websocket v1.5.0 // indirect
+
 require (
 	github.com/emirpasic/gods v1.18.1 // indirect
 	github.com/kr/pretty v0.3.1 // indirect

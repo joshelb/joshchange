@@ -7,6 +7,7 @@ client = Client(host='localhost',settings={'use_numpy': True})
 def generate_Candles():
     threading.Timer(1, generate_Candles).start ()
     df = client.query_dataframe('SELECT TOP (100) * FROM tickdata.btcusd ORDER BY timestamp DESC')
+    print(df)
     df['time'] = pd.to_datetime(df['timestamp'],unit='s')
     xd = df.drop(columns=['timestamp'])
     fd = xd.set_index('time')

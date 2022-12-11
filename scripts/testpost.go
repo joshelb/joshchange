@@ -17,12 +17,12 @@ type Order struct {
 
 func main() {
 
-	for i := 16000; i < 17000; i = i + 100 {
+	for i := 15000; i < 15900; i = i + 100 {
 		values := &Order{
 			Symbol:    "btcusd",
 			Side:      "buy",
 			Ordertype: "limit",
-			Quantity:  30,
+			Quantity:  300,
 			Price:     float64(i)}
 
 		json_data, err := json.Marshal(values)
@@ -44,7 +44,7 @@ func main() {
 			Symbol:    "btcusd",
 			Side:      "sell",
 			Ordertype: "limit",
-			Quantity:  25,
+			Quantity:  250,
 			Price:     float64(i)}
 
 		json_data, err := json.Marshal(values)
@@ -65,7 +65,7 @@ func main() {
 		Symbol:    "btcusd",
 		Side:      "sell",
 		Ordertype: "market",
-		Quantity:  800,
+		Quantity:  0,
 		Price:     float64(0)}
 
 	json_data, err := json.Marshal(values)
