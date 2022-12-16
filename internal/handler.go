@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
-	"time"
+	"sync"
 
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
@@ -19,6 +19,19 @@ var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
 		return true
 	},
+}
+
+type Connection struct {
+	Socket *websocket.Conn
+	mu     sync.Mutex
+}
+
+type WSStream struct {
+	Type        string
+	Stream      string
+	Symbol      string
+	Timeframe   string
+	Aggregation string
 }
 
 type Embed struct {
@@ -50,38 +63,47 @@ func (e Embed) OrderHandler(writer http.ResponseWriter, r *http.Request) {
 	logg.Info(e.Collection.Map.Load("btcusd"))
 }
 
-func (e Embed) OrderbookHandler(writer http.ResponseWriter, r *http.Request) {
-	enableCors(&writer)
-	conn, err := upgrader.Upgrade(writer, r, nil)
-	if err != nil {
-		logg.Error(err)
-	}
-	defer conn.Close()
-	vars := mux.Vars(r)
-	symbol := vars["symbol"]
-	for {
-		mt, _, err := conn.ReadMessage()
+func (e Embed) OrderbookHandler(clickconn *clickhouse.Conn) http.HandlerFunc {
+	return func(writer http.ResponseWriter, r *http.Request) {
+		enableCors(&writer)
+		conn, err := upgrader.Upgrade(writer, r, nil)
 		if err != nil {
 			logg.Error(err)
-			break
 		}
-		go func() {
-			for {
-				orderBook, err := e.Collection.GetOrderbook_bySymbol(symbol)
-				if err != nil {
-					logg.Error(err)
-				}
-				data, err := orderBook.MarshalJSON()
-				if err != nil {
-					logg.Error(err)
-				}
-				err = conn.WriteMessage(mt, data)
-				if err != nil {
-					break
-				}
-				time.Sleep(500 * time.Millisecond)
+		defer conn.Close()
+		connection := new(Connection)
+		connection.Socket = conn
+		quitOrderbook := make(chan bool)
+		quitCandlesticks := make(chan bool)
+		quitTrades := make(chan bool)
+		for {
+			mt, msg, err := conn.ReadMessage()
+			if err != nil {
+				logg.Error(err)
+				break
 			}
-		}()
+			var dat WSStream
+			if err = json.Unmarshal(msg, &dat); err != nil {
+				logg.Error(err)
+			}
+			if dat.Type == "subscribe" {
+				if dat.Stream == "orderbook" {
+					go connection.orderbookHandler(mt, dat, quitOrderbook, e)
+				}
+				if dat.Stream == "candlesticks" {
+					go candlesticksHandler(clickconn, conn, mt, dat, quitCandlesticks, e)
+				}
+				if dat.Stream == "trades" {
+					go connection.tradesHandler(clickconn, mt, dat, quitTrades, e)
+				}
+			}
+			if dat.Type == "unsubscribe" {
+				if dat.Stream == "orderbook" {
+					quitOrderbook <- true
+					logg.Info("Client unsubscribed from orderbook")
+				}
+			}
+		}
 	}
 }
 
