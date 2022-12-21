@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"sync"
 
+	jwtmiddleware "github.com/auth0/go-jwt-middleware/v2"
+	"github.com/auth0/go-jwt-middleware/v2/validator"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
 	"github.com/joshelb/joshchange/internal/orderbook"
@@ -38,14 +40,20 @@ type Embed struct {
 	Collection *orderbook.Orderbookcollection
 }
 
+type CustomClaimsExample struct {
+	Email         string `json:"email"`
+	ShouldReject bool   `json:"shouldReject,omitempty"`
+}
+
 func enableCors(w *http.ResponseWriter) {
 	(*w).Header().Set("Access-Control-Allow-Origin", "*")
 	(*w).Header().Set("Access-Control-Allow-Headers", "Access-Control-Allow-Headers, X-Requested-With, Content-Type, Accept, Origin, Authorization,Content-Type, Content-Length, X-Auth-Token, Access-Control-Request-Method, Access-Control-Request-Headers")
 	(*w).Header().Set("Access-Control-Allow-Methods", "GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS")
 }
-
 func (e Embed) OrderHandler(writer http.ResponseWriter, r *http.Request) {
-	enableCors(&writer)
+	claims := r.Context().Value(jwtmiddleware.ContextKey{}).(*validator.ValidatedClaims)
+	customClaims := claims.CustomClaims.(*CustomClaimsExample)
+	logg.Info(customClaims)
 	writer.Header().Set("Content-Type", "application/json")
 	writer.WriteHeader(http.StatusOK)
 	var order orderbook.Order
@@ -78,6 +86,7 @@ func (e Embed) OrderbookHandler(clickconn *clickhouse.Conn) http.HandlerFunc {
 		quitTrades := make(chan bool)
 		for {
 			mt, msg, err := conn.ReadMessage()
+			logg.Info(msg)
 			if err != nil {
 				logg.Error(err)
 				break

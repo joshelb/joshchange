@@ -12,7 +12,18 @@ require (
 	github.com/sirupsen/logrus v1.9.0
 )
 
-require github.com/gorilla/websocket v1.5.0 // indirect
+require (
+	github.com/auth0/go-jwt-middleware v1.0.1 // indirect
+	github.com/auth0/go-jwt-middleware/v2 v2.1.0 // indirect
+	github.com/felixge/httpsnoop v1.0.1 // indirect
+	github.com/form3tech-oss/jwt-go v3.2.2+incompatible // indirect
+	github.com/gorilla/handlers v1.5.1 // indirect
+	github.com/gorilla/websocket v1.5.0 // indirect
+	github.com/pkg/errors v0.9.1 // indirect
+	github.com/rs/cors v1.8.2 // indirect
+	golang.org/x/crypto v0.0.0-20220518034528-6f7dac969898 // indirect
+	gopkg.in/square/go-jose.v2 v2.6.0 // indirect
+)
 
 require (
 	github.com/emirpasic/gods v1.18.1 // indirect
