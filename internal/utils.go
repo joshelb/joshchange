@@ -15,6 +15,14 @@ type Response struct {
 	Data   interface{}
 }
 
+func createDbIfNotExists(email string){
+
+
+}
+
+
+
+
 func (c *Connection) tradesHandler(clickhouseConn *clickhouse.Conn, mt int, msg WSStream, ch <-chan bool, e Embed) {
 	for {
 		select {

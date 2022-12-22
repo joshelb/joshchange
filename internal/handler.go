@@ -53,7 +53,7 @@ func enableCors(w *http.ResponseWriter) {
 func (e Embed) OrderHandler(writer http.ResponseWriter, r *http.Request) {
 	claims := r.Context().Value(jwtmiddleware.ContextKey{}).(*validator.ValidatedClaims)
 	customClaims := claims.CustomClaims.(*CustomClaimsExample)
-	logg.Info(customClaims)
+	logg.Info(customClaims.Email)
 	writer.Header().Set("Content-Type", "application/json")
 	writer.WriteHeader(http.StatusOK)
 	var order orderbook.Order

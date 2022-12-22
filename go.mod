@@ -5,8 +5,6 @@ go 1.19
 require (
 	github.com/go-redis/redis/v8 v8.11.5
 	github.com/gorilla/mux v1.8.0
-	github.com/joshelb/orderbook v0.0.0-20221207221140-6587efc63b74
-	github.com/muzykantov/orderbook v0.0.0-20190314143358-f93a3deda343
 	github.com/rs/xid v1.4.0
 	github.com/shopspring/decimal v1.3.1
 	github.com/sirupsen/logrus v1.9.0
@@ -19,6 +17,7 @@ require (
 	github.com/form3tech-oss/jwt-go v3.2.2+incompatible // indirect
 	github.com/gorilla/handlers v1.5.1 // indirect
 	github.com/gorilla/websocket v1.5.0 // indirect
+	github.com/joshelb/orderbook v0.0.0-20221222145547-fca693af1a92 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/rs/cors v1.8.2 // indirect
 	golang.org/x/crypto v0.0.0-20220518034528-6f7dac969898 // indirect

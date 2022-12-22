@@ -76,7 +76,8 @@ func (o Orderbookcollection) Marketorder(obj Order) {
 func (o Orderbookcollection) Limitorder(obj Order) {
 	orderBook, _ := o.GetOrderbook_bySymbol(obj.Symbol)
 	if obj.Side == "sell" {
-		_, _, _, err := orderBook.ProcessLimitOrder(ob.Sell, xid.New().String(), decimal.NewFromFloat(obj.Quantity), decimal.NewFromFloat(obj.Price))
+		ID := xid.New().String()
+		_, _, _, err := orderBook.ProcessLimitOrder(ob.Sell, ID, decimal.NewFromFloat(obj.Quantity), decimal.NewFromFloat(obj.Price))
 		if err != nil {
 			logg.Error(err)
 		}
