@@ -41,19 +41,46 @@ type Embed struct {
 }
 
 type CustomClaimsExample struct {
-	Email         string `json:"email"`
+	UserID        string `json:"userid"`
 	ShouldReject bool   `json:"shouldReject,omitempty"`
 }
+
+type User struct{
+	UserID string `json:"userid"`
+}
+
+
 
 func enableCors(w *http.ResponseWriter) {
 	(*w).Header().Set("Access-Control-Allow-Origin", "*")
 	(*w).Header().Set("Access-Control-Allow-Headers", "Access-Control-Allow-Headers, X-Requested-With, Content-Type, Accept, Origin, Authorization,Content-Type, Content-Length, X-Auth-Token, Access-Control-Request-Method, Access-Control-Request-Headers")
 	(*w).Header().Set("Access-Control-Allow-Methods", "GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS")
 }
+
+func RegisterHandler(conn *clickhouse.Conn) http.HandlerFunc {
+	return func(writer http.ResponseWriter, r *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		writer.WriteHeader(http.StatusOK)
+		var usr User
+		err := json.NewDecoder(r.Body).Decode(&usr)
+		if err != nil {
+		  logg.Error(err)
+		}
+		s := fmt.Sprintf("CREATE TABLE IF NOT EXISTS users.%s (user_id String) ENGINE = MergeTree() PRIMARY KEY (user_id)", usr.UserID)
+		q := clickhouse.NewQuery(s)
+		err = q.Exec(conn)
+		if err != nil {
+			logg.Error(err)
+		}
+		logg.Info("###############################################")
+		writer.Write([]byte("Hello SUCCESS"))
+	}
+}
+
 func (e Embed) OrderHandler(writer http.ResponseWriter, r *http.Request) {
 	claims := r.Context().Value(jwtmiddleware.ContextKey{}).(*validator.ValidatedClaims)
 	customClaims := claims.CustomClaims.(*CustomClaimsExample)
-	logg.Info(customClaims.Email)
+	logg.Info(customClaims.UserID)
 	writer.Header().Set("Content-Type", "application/json")
 	writer.WriteHeader(http.StatusOK)
 	var order orderbook.Order

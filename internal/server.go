@@ -2,8 +2,8 @@ package server
 
 import (
 	"context"
-	"net/http"
 	"errors"
+	"net/http"
 	"net/url"
 	"time"
 
@@ -43,6 +43,9 @@ func New() {
 	router.HandleFunc("/orderbook/{symbol}", embed.OrderbookHandler(conn)).Methods("GET")
 	router.HandleFunc("/trade/{symbol}", TradeHandler)
 	router.HandleFunc("/candlesticks/{symbol}/{timeframe}", CandlesticksHandler(conn)).Methods("GET")
+	var registerhandler = http.HandlerFunc(RegisterHandler(conn))
+	reg := cors.AllowAll().Handler(registerhandler)
+	router.Handle("/registerDBEntry", reg)
 
 	err := http.ListenAndServe(":8080", router)
 	if err != nil {
