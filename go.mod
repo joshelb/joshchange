@@ -15,6 +15,7 @@ require (
 	github.com/auth0/go-jwt-middleware/v2 v2.1.0 // indirect
 	github.com/felixge/httpsnoop v1.0.1 // indirect
 	github.com/form3tech-oss/jwt-go v3.2.2+incompatible // indirect
+	github.com/go-sql-driver/mysql v1.7.0 // indirect
 	github.com/gorilla/handlers v1.5.1 // indirect
 	github.com/gorilla/websocket v1.5.0 // indirect
 	github.com/joshelb/orderbook v0.0.0-20221222145547-fca693af1a92 // indirect

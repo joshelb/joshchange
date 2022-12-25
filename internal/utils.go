@@ -10,19 +10,17 @@ import (
 	logg "github.com/sirupsen/logrus"
 )
 
+
+// Websocket Response from client
 type Response struct {
 	Stream string
 	Data   interface{}
 }
 
-func createDbIfNotExists(email string){
-
-
-}
 
 
 
-
+// Handling of Trade Data
 func (c *Connection) tradesHandler(clickhouseConn *clickhouse.Conn, mt int, msg WSStream, ch <-chan bool, e Embed) {
 	for {
 		select {
@@ -61,6 +59,7 @@ func (c *Connection) tradesHandler(clickhouseConn *clickhouse.Conn, mt int, msg 
 	}
 }
 
+// Handling of CandlestickData
 func candlesticksHandler(clickhouseConn *clickhouse.Conn, conn *websocket.Conn, mt int, msg WSStream, ch <-chan bool, e Embed) {
 	for {
 		select {
@@ -100,6 +99,7 @@ func candlesticksHandler(clickhouseConn *clickhouse.Conn, conn *websocket.Conn, 
 	}
 }
 
+// Handling of OrderboookData
 func (c *Connection) orderbookHandler(mt int, msg WSStream, ch <-chan bool, e Embed) {
 	for {
 		select {
@@ -125,6 +125,7 @@ func (c *Connection) orderbookHandler(mt int, msg WSStream, ch <-chan bool, e Em
 	}
 }
 
+// Sends message to client
 func (c *Connection) Send(mt int, message []byte) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()

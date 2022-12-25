@@ -3,19 +3,18 @@ package server
 import (
 	"encoding/json"
 	"fmt"
-	"html/template"
 	"net/http"
 	"sync"
 
 	jwtmiddleware "github.com/auth0/go-jwt-middleware/v2"
 	"github.com/auth0/go-jwt-middleware/v2/validator"
-	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
 	"github.com/joshelb/joshchange/internal/orderbook"
 	"github.com/roistat/go-clickhouse"
 	logg "github.com/sirupsen/logrus"
 )
 
+// Upgrade http for websocket support
 var upgrader = websocket.Upgrader{
 
 	CheckOrigin: func(r *http.Request) bool {
@@ -50,13 +49,7 @@ type User struct{
 }
 
 
-
-func enableCors(w *http.ResponseWriter) {
-	(*w).Header().Set("Access-Control-Allow-Origin", "*")
-	(*w).Header().Set("Access-Control-Allow-Headers", "Access-Control-Allow-Headers, X-Requested-With, Content-Type, Accept, Origin, Authorization,Content-Type, Content-Length, X-Auth-Token, Access-Control-Request-Method, Access-Control-Request-Headers")
-	(*w).Header().Set("Access-Control-Allow-Methods", "GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS")
-}
-
+// Registers user to backend_db after signup
 func RegisterHandler(conn *clickhouse.Conn) http.HandlerFunc {
 	return func(writer http.ResponseWriter, r *http.Request) {
 		writer.Header().Set("Content-Type", "application/json")
@@ -66,17 +59,18 @@ func RegisterHandler(conn *clickhouse.Conn) http.HandlerFunc {
 		if err != nil {
 		  logg.Error(err)
 		}
-		s := fmt.Sprintf("CREATE TABLE IF NOT EXISTS users.%s (user_id String) ENGINE = MergeTree() PRIMARY KEY (user_id)", usr.UserID)
+		table_name := usr.UserID[6:]
+		s := fmt.Sprintf("CREATE TABLE IF NOT EXISTS users.%s (wallet_balance String, open_orders Array(String), order_history Array(String), trade_history Array(String)) ENGINE = MergeTree() PRIMARY KEY (wallet_balance)", table_name)
 		q := clickhouse.NewQuery(s)
 		err = q.Exec(conn)
 		if err != nil {
 			logg.Error(err)
 		}
 		logg.Info("###############################################")
-		writer.Write([]byte("Hello SUCCESS"))
 	}
 }
 
+// Handles incoming Orders
 func (e Embed) OrderHandler(writer http.ResponseWriter, r *http.Request) {
 	claims := r.Context().Value(jwtmiddleware.ContextKey{}).(*validator.ValidatedClaims)
 	customClaims := claims.CustomClaims.(*CustomClaimsExample)
@@ -90,17 +84,17 @@ func (e Embed) OrderHandler(writer http.ResponseWriter, r *http.Request) {
 	}
 	fmt.Printf("%+v\n", order.Ordertype)
 	if order.Ordertype == "market" {
-		e.Collection.Marketorder(order)
+		e.Collection.Marketorder(order, customClaims.UserID)
 	}
 	if order.Ordertype == "limit" {
-		e.Collection.Limitorder(order)
+		e.Collection.Limitorder(order, customClaims.UserID)
 	}
 	logg.Info(e.Collection.Map.Load("btcusd"))
 }
 
-func (e Embed) OrderbookHandler(clickconn *clickhouse.Conn) http.HandlerFunc {
+// WS Handler for Datastream to Frontend
+func (e Embed) WSHandler(clickconn *clickhouse.Conn) http.HandlerFunc {
 	return func(writer http.ResponseWriter, r *http.Request) {
-		enableCors(&writer)
 		conn, err := upgrader.Upgrade(writer, r, nil)
 		if err != nil {
 			logg.Error(err)
@@ -143,44 +137,4 @@ func (e Embed) OrderbookHandler(clickconn *clickhouse.Conn) http.HandlerFunc {
 	}
 }
 
-func TradeHandler(writer http.ResponseWriter, r *http.Request) {
-	tmp := template.Must(template.ParseFiles("templates/layout.html"))
-	vars := mux.Vars(r)
-	symbol := vars["symbol"]
-	data := symbol
-	tmp.Execute(writer, data)
 
-}
-
-func CandlesticksHandler(conn *clickhouse.Conn) http.HandlerFunc {
-	return func(writer http.ResponseWriter, r *http.Request) {
-		enableCors(&writer)
-		vars := mux.Vars(r)
-		symbol := vars["symbol"]
-		timeframe := vars["timeframe"]
-		s := fmt.Sprintf("SELECT * FROM candlesticks.%s%s FINAL", symbol, timeframe)
-		q := clickhouse.NewQuery(s)
-		iter := q.Iter(conn)
-		var (
-			timestamp string
-			open      string
-			high      string
-			low       string
-			close     string
-			volume    string
-		)
-		var table [][]string
-		for iter.Scan(&timestamp, &open, &high, &low, &close, &volume) {
-			row := []string{timestamp, open, high, low, close, volume}
-			table = append(table, row)
-		}
-		if iter.Error() != nil {
-			logg.Error(iter.Error())
-		}
-		res, err := json.Marshal(table)
-		if err != nil {
-			logg.Error(err)
-		}
-		writer.Write(res)
-	}
-}

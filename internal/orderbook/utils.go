@@ -6,6 +6,7 @@ import (
 	ob "github.com/joshelb/orderbook"
 )
 
+// get Orderbook
 func (o Orderbookcollection) GetOrderbook_bySymbol(symbol string) (*ob.OrderBook, error) {
 	value, ok := o.Map.Load(symbol)
 	if ok {

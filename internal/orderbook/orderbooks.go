@@ -32,7 +32,7 @@ func (o *Orderbookcollection) InitOrderbook(symbol string) {
 	logg.Info("Initialized Orderbook for Symbol %s", symbol)
 }
 
-func (o Orderbookcollection) Marketorder(obj Order) {
+func (o Orderbookcollection) Marketorder(obj Order, userid string) {
 	orderBook, err := o.GetOrderbook_bySymbol(obj.Symbol)
 	if err != nil {
 		logg.Error(err)
@@ -73,7 +73,7 @@ func (o Orderbookcollection) Marketorder(obj Order) {
 	}
 }
 
-func (o Orderbookcollection) Limitorder(obj Order) {
+func (o Orderbookcollection) Limitorder(obj Order, userid string) {
 	orderBook, _ := o.GetOrderbook_bySymbol(obj.Symbol)
 	if obj.Side == "sell" {
 		ID := xid.New().String()

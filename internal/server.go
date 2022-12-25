@@ -9,6 +9,8 @@ import (
 
 	jwtmiddleware "github.com/auth0/go-jwt-middleware/v2"
 	"github.com/auth0/go-jwt-middleware/v2/jwks"
+	"database/sql"
+	_ "github.com/go-sql-driver/mysql"
 	"github.com/auth0/go-jwt-middleware/v2/validator"
 	"github.com/gorilla/mux"
 	oj "github.com/joshelb/joshchange/internal/orderbook"
@@ -17,43 +19,53 @@ import (
 	logg "github.com/sirupsen/logrus"
 )
 
-var ctx = context.Background()
-
+// Initialises HTTP Server
 func New() {
+	db, err := sql.Open("mysql", "joshelb:chirurgie@tcp(127.0.0.1:3306)/users")
+	if err != nil {
+		panic(err.Error())
+	}
+	defer db.Close()
+
+	insert, err := db.Query("CREATE TABLE testuser ( UserID int, wallet_balance varchar(255) )")
+	if err != nil {
+		panic(err.Error())
+	}
+	defer insert.Close()
+
+
 	conn := clickhouse.NewConn("localhost:8123", clickhouse.NewHttpTransport())
 	collection := &oj.Orderbookcollection{ClickhouseClient: conn}
 	collection.InitOrderbook("btcusd")
-	logg.Info(collection)
+	// var of Embed struct to pass Orderbookcollection to Handler
 	embed := &Embed{
 		Collection: collection,
 	}
-	/*c := cors.New(cors.Options{
-	    AllowedOrigins: []string{"http://localhost:5173"},
-			AllowedHeaders: []string{"Content-Type, X-Auth-Token"},
-	    AllowCredentials: true,
-	    Debug: true,
-		})*/
-	router := mux.NewRouter()
-	fs := http.FileServer(http.Dir("./assets/"))
-	router.PathPrefix("/assets/").Handler(http.StripPrefix("/assets/", fs))
-	var handler = http.HandlerFunc(embed.OrderHandler)
 	middleware := setupAuth()
-	Handler := cors.AllowAll().Handler(middleware.CheckJWT(handler))
-	router.Handle("/order", Handler)
-	router.HandleFunc("/orderbook/{symbol}", embed.OrderbookHandler(conn)).Methods("GET")
-	router.HandleFunc("/trade/{symbol}", TradeHandler)
-	router.HandleFunc("/candlesticks/{symbol}/{timeframe}", CandlesticksHandler(conn)).Methods("GET")
-	var registerhandler = http.HandlerFunc(RegisterHandler(conn))
-	reg := cors.AllowAll().Handler(registerhandler)
-	router.Handle("/registerDBEntry", reg)
+	fs := http.FileServer(http.Dir("./assets/"))
+	orderhandler := http.HandlerFunc(embed.OrderHandler)
+	// Allow CORS and check Athorization Token with the JWT middleware
+	orderhandler_update := cors.AllowAll().Handler(middleware.CheckJWT(orderhandler))
+	registerhandler := http.HandlerFunc(RegisterHandler(conn))	
+	registerhandler_update := cors.AllowAll().Handler(registerhandler)
+	wshandler := http.HandlerFunc(embed.WSHandler(conn)) 
+	wshandler_update := cors.AllowAll().Handler(wshandler)
 
-	err := http.ListenAndServe(":8080", router)
+
+	router := mux.NewRouter()
+	router.PathPrefix("/assets/").Handler(http.StripPrefix("/assets/", fs))
+	router.Handle("/order", orderhandler_update)
+	router.Handle("/wsdata", wshandler_update)
+	router.Handle("/registerDBEntry", registerhandler_update)
+
+	err = http.ListenAndServe(":8080", router)
 	if err != nil {
 		logg.Error("There is an error with the Server.")
 	}
 
 }
 
+//Validation function for CustomClaims
 func (c *CustomClaimsExample) Validate(ctx context.Context) error {
 	if c.ShouldReject {
 		return errors.New("should reject was set to true")
@@ -61,6 +73,7 @@ func (c *CustomClaimsExample) Validate(ctx context.Context) error {
 	return nil
 }
 
+// JWT middleware to check Auth
 func setupAuth() *jwtmiddleware.JWTMiddleware {
 	issuerURL, err := url.Parse("https://dev-q7xsxw5kc72jd045.eu.auth0.com/")
 	provider := jwks.NewCachingProvider(issuerURL, 5*time.Minute)
