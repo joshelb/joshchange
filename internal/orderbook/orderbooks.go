@@ -3,6 +3,7 @@ package orderbook
 import (
 	"fmt"
 	"sync"
+	"database/sql"
 	"time"
 
 	ob "github.com/joshelb/orderbook"
@@ -10,6 +11,7 @@ import (
 	"github.com/rs/xid"
 	"github.com/shopspring/decimal"
 	logg "github.com/sirupsen/logrus"
+	_ "github.com/go-sql-driver/mysql"
 )
 
 type Order struct {
@@ -23,6 +25,7 @@ type Order struct {
 type Orderbookcollection struct {
 	Map              sync.Map
 	ClickhouseClient *clickhouse.Conn
+	MySQLClient *sql.DB 
 }
 
 func (o *Orderbookcollection) InitOrderbook(symbol string) {
@@ -37,15 +40,17 @@ func (o Orderbookcollection) Marketorder(obj Order, userid string) {
 	if err != nil {
 		logg.Error(err)
 	}
+	db := o.MySQLClient
 	if obj.Side == "sell" {
 		curPrice, err := orderBook.CalculatePriceAfterExecution(ob.Sell, decimal.NewFromFloat(obj.Quantity))
 		if err != nil {
 			logg.Error(err)
 		}
-		_, _, _, _, err = orderBook.ProcessMarketOrder(ob.Sell, decimal.NewFromFloat(obj.Quantity))
+		done, _, _, _, err := orderBook.ProcessMarketOrder(ob.Sell, decimal.NewFromFloat(obj.Quantity))
 		if err != nil {
 			logg.Error(err)
 		}
+		logg.Info(done)
 		unix_timestamp := time.Now().Unix()
 		Price, _ := curPrice.Float64()
 		q := clickhouse.NewQuery(fmt.Sprintf("INSERT INTO tickdata.%s VALUES (%d,%s,%s,'sell')", obj.Symbol, int(unix_timestamp), fmt.Sprintf("%f", obj.Quantity), fmt.Sprintf("%f", Price)))
@@ -59,10 +64,28 @@ func (o Orderbookcollection) Marketorder(obj Order, userid string) {
 		if err != nil {
 			logg.Error(err)
 		}
-		_, _, _, _, err = orderBook.ProcessMarketOrder(ob.Buy, decimal.NewFromFloat(obj.Quantity))
+		done, partial, _, _, err := orderBook.ProcessMarketOrder(ob.Buy, decimal.NewFromFloat(obj.Quantity))
 		if err != nil {
 			logg.Error(err)
 		}
+		for _, value := range done {
+			logg.Info(value.ID())
+			query := fmt.Sprintf("DELETE FROM orders WHERE orderid='%s'", value.ID())
+			delet, err := db.Query(query)
+			if err != nil {
+				logg.Error(err)
+			}
+			defer delet.Close()
+		}
+		if partial != nil{
+			query := fmt.Sprintf("UPDATE orders SET quantity = '%s' WHERE orderid = '%s'", (partial.Quantity()).String(), partial.ID())	
+			update, err := db.Query(query)
+			if err != nil {
+				logg.Error(err)
+			}
+			defer update.Close()
+		}
+
 		unix_timestamp := time.Now().Unix()
 		Price, _ := curPrice.Float64()
 		q := clickhouse.NewQuery(fmt.Sprintf("INSERT INTO tickdata.%s VALUES (%d,%s,%s,'buy')", obj.Symbol, int(unix_timestamp), fmt.Sprintf("%f", obj.Quantity), fmt.Sprintf("%f", Price)))
@@ -74,18 +97,52 @@ func (o Orderbookcollection) Marketorder(obj Order, userid string) {
 }
 
 func (o Orderbookcollection) Limitorder(obj Order, userid string) {
-	orderBook, _ := o.GetOrderbook_bySymbol(obj.Symbol)
+	orderBook, err := o.GetOrderbook_bySymbol(obj.Symbol)
+	if err != nil {
+		logg.Error(err)
+	}
+	db := o.MySQLClient
 	if obj.Side == "sell" {
-		ID := xid.New().String()
-		_, _, _, err := orderBook.ProcessLimitOrder(ob.Sell, ID, decimal.NewFromFloat(obj.Quantity), decimal.NewFromFloat(obj.Price))
+                ID := xid.New().String()
+		done, partial, _, err := orderBook.ProcessLimitOrder(ob.Sell, ID, decimal.NewFromFloat(obj.Quantity), decimal.NewFromFloat(obj.Price))
 		if err != nil {
 			logg.Error(err)
+		}
+		if done == nil && partial == nil {
+			query := fmt.Sprintf("INSERT INTO orders(orderid, userid, side, quantity, price, timestamp) VALUES('%s','%s','sell','%s','%s','%s')", ID, userid, fmt.Sprintf("%f",obj.Quantity), fmt.Sprintf("%f",obj.Price), string(time.Now().Unix()))
+			stmt, err := db.Prepare(query)
+			if err != nil {
+				logg.Error(err)
+			}
+			_, err = stmt.Exec()
+			if err != nil {
+				logg.Error(err)
+			}
+			return
+		}
+		for _, value := range done {
+			query := fmt.Sprintf("DELETE FROM orders WHERE orderid='%s'", value.ID())
+			delet, err := db.Query(query)
+			if err != nil {
+				logg.Error(err)
+			}
+			defer delet.Close()
+		}
+		if partial != nil {
+			query := fmt.Sprintf("UPDATE orders SET quantity = %s WHERE orderid = %s", (partial.Quantity()).String(), partial.ID())
+			update, err := db.Query(query)
+			if err != nil {
+				logg.Error(err)
+			}
+			defer update.Close()
 		}
 	}
 	if obj.Side == "buy" {
-		_, _, _, err := orderBook.ProcessLimitOrder(ob.Buy, xid.New().String(), decimal.NewFromFloat(obj.Quantity), decimal.NewFromFloat(obj.Price))
+		ID := xid.New().String()
+		done, partial, _, err := orderBook.ProcessLimitOrder(ob.Buy, ID, decimal.NewFromFloat(obj.Quantity), decimal.NewFromFloat(obj.Price))
 		if err != nil {
 			logg.Error(err)
 		}
+
 	}
 }

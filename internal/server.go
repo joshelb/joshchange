@@ -21,21 +21,16 @@ import (
 
 // Initialises HTTP Server
 func New() {
-	db, err := sql.Open("mysql", "joshelb:chirurgie@tcp(127.0.0.1:3306)/users")
+	db, err := sql.Open("mysql", "joshelb:chirurgie@tcp(127.0.0.1:3306)/userInfo")
 	if err != nil {
 		panic(err.Error())
 	}
 	defer db.Close()
 
-	insert, err := db.Query("CREATE TABLE testuser ( UserID int, wallet_balance varchar(255) )")
-	if err != nil {
-		panic(err.Error())
-	}
-	defer insert.Close()
 
 
 	conn := clickhouse.NewConn("localhost:8123", clickhouse.NewHttpTransport())
-	collection := &oj.Orderbookcollection{ClickhouseClient: conn}
+	collection := &oj.Orderbookcollection{ClickhouseClient: conn, MySQLClient: db}
 	collection.InitOrderbook("btcusd")
 	// var of Embed struct to pass Orderbookcollection to Handler
 	embed := &Embed{
@@ -46,7 +41,7 @@ func New() {
 	orderhandler := http.HandlerFunc(embed.OrderHandler)
 	// Allow CORS and check Athorization Token with the JWT middleware
 	orderhandler_update := cors.AllowAll().Handler(middleware.CheckJWT(orderhandler))
-	registerhandler := http.HandlerFunc(RegisterHandler(conn))	
+	registerhandler := http.HandlerFunc(RegisterHandler(db))	
 	registerhandler_update := cors.AllowAll().Handler(registerhandler)
 	wshandler := http.HandlerFunc(embed.WSHandler(conn)) 
 	wshandler_update := cors.AllowAll().Handler(wshandler)

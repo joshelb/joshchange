@@ -4,10 +4,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"database/sql"
 	"sync"
 
 	jwtmiddleware "github.com/auth0/go-jwt-middleware/v2"
 	"github.com/auth0/go-jwt-middleware/v2/validator"
+	_ "github.com/go-sql-driver/mysql"
 	"github.com/gorilla/websocket"
 	"github.com/joshelb/joshchange/internal/orderbook"
 	"github.com/roistat/go-clickhouse"
@@ -50,7 +52,7 @@ type User struct{
 
 
 // Registers user to backend_db after signup
-func RegisterHandler(conn *clickhouse.Conn) http.HandlerFunc {
+func RegisterHandler(conn *sql.DB) http.HandlerFunc {
 	return func(writer http.ResponseWriter, r *http.Request) {
 		writer.Header().Set("Content-Type", "application/json")
 		writer.WriteHeader(http.StatusOK)
@@ -59,13 +61,13 @@ func RegisterHandler(conn *clickhouse.Conn) http.HandlerFunc {
 		if err != nil {
 		  logg.Error(err)
 		}
-		table_name := usr.UserID[6:]
-		s := fmt.Sprintf("CREATE TABLE IF NOT EXISTS users.%s (wallet_balance String, open_orders Array(String), order_history Array(String), trade_history Array(String)) ENGINE = MergeTree() PRIMARY KEY (wallet_balance)", table_name)
-		q := clickhouse.NewQuery(s)
-		err = q.Exec(conn)
+		user_id := usr.UserID
+		query := fmt.Sprintf("INSERT INTO users (user_id) VALUES (%s)", user_id)
+		insert, err := conn.Query(query)
 		if err != nil {
 			logg.Error(err)
 		}
+		defer insert.Close()
 		logg.Info("###############################################")
 	}
 }
@@ -74,7 +76,6 @@ func RegisterHandler(conn *clickhouse.Conn) http.HandlerFunc {
 func (e Embed) OrderHandler(writer http.ResponseWriter, r *http.Request) {
 	claims := r.Context().Value(jwtmiddleware.ContextKey{}).(*validator.ValidatedClaims)
 	customClaims := claims.CustomClaims.(*CustomClaimsExample)
-	logg.Info(customClaims.UserID)
 	writer.Header().Set("Content-Type", "application/json")
 	writer.WriteHeader(http.StatusOK)
 	var order orderbook.Order
