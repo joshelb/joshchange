@@ -7,11 +7,12 @@ import (
 	"net/url"
 	"time"
 
+	"database/sql"
+
 	jwtmiddleware "github.com/auth0/go-jwt-middleware/v2"
 	"github.com/auth0/go-jwt-middleware/v2/jwks"
-	"database/sql"
-	_ "github.com/go-sql-driver/mysql"
 	"github.com/auth0/go-jwt-middleware/v2/validator"
+	_ "github.com/go-sql-driver/mysql"
 	"github.com/gorilla/mux"
 	oj "github.com/joshelb/joshchange/internal/orderbook"
 	"github.com/roistat/go-clickhouse"
@@ -27,8 +28,6 @@ func New() {
 	}
 	defer db.Close()
 
-
-
 	conn := clickhouse.NewConn("localhost:8123", clickhouse.NewHttpTransport())
 	collection := &oj.Orderbookcollection{ClickhouseClient: conn, MySQLClient: db}
 	collection.InitOrderbook("btcusd")
@@ -41,11 +40,10 @@ func New() {
 	orderhandler := http.HandlerFunc(embed.OrderHandler)
 	// Allow CORS and check Athorization Token with the JWT middleware
 	orderhandler_update := cors.AllowAll().Handler(middleware.CheckJWT(orderhandler))
-	registerhandler := http.HandlerFunc(RegisterHandler(db))	
+	registerhandler := http.HandlerFunc(RegisterHandler(db))
 	registerhandler_update := cors.AllowAll().Handler(registerhandler)
-	wshandler := http.HandlerFunc(embed.WSHandler(conn)) 
+	wshandler := http.HandlerFunc(embed.WSHandler(conn))
 	wshandler_update := cors.AllowAll().Handler(wshandler)
-
 
 	router := mux.NewRouter()
 	router.PathPrefix("/assets/").Handler(http.StripPrefix("/assets/", fs))
@@ -60,7 +58,7 @@ func New() {
 
 }
 
-//Validation function for CustomClaims
+// Validation function for CustomClaims
 func (c *CustomClaimsExample) Validate(ctx context.Context) error {
 	if c.ShouldReject {
 		return errors.New("should reject was set to true")
@@ -71,6 +69,9 @@ func (c *CustomClaimsExample) Validate(ctx context.Context) error {
 // JWT middleware to check Auth
 func setupAuth() *jwtmiddleware.JWTMiddleware {
 	issuerURL, err := url.Parse("https://dev-q7xsxw5kc72jd045.eu.auth0.com/")
+	if err != nil {
+		logg.Error(err)
+	}
 	provider := jwks.NewCachingProvider(issuerURL, 5*time.Minute)
 	customClaims := func() validator.CustomClaims {
 		return &CustomClaimsExample{}

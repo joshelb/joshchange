@@ -1,10 +1,10 @@
 package server
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"database/sql"
 	"sync"
 
 	jwtmiddleware "github.com/auth0/go-jwt-middleware/v2"
@@ -35,6 +35,7 @@ type WSStream struct {
 	Symbol      string
 	Timeframe   string
 	Aggregation string
+	Email       string
 }
 
 type Embed struct {
@@ -42,14 +43,13 @@ type Embed struct {
 }
 
 type CustomClaimsExample struct {
-	UserID        string `json:"userid"`
+	UserID       string `json:"email"`
 	ShouldReject bool   `json:"shouldReject,omitempty"`
 }
 
-type User struct{
+type User struct {
 	UserID string `json:"userid"`
 }
-
 
 // Registers user to backend_db after signup
 func RegisterHandler(conn *sql.DB) http.HandlerFunc {
@@ -59,7 +59,7 @@ func RegisterHandler(conn *sql.DB) http.HandlerFunc {
 		var usr User
 		err := json.NewDecoder(r.Body).Decode(&usr)
 		if err != nil {
-		  logg.Error(err)
+			logg.Error(err)
 		}
 		user_id := usr.UserID
 		query := fmt.Sprintf("INSERT INTO users (user_id) VALUES (%s)", user_id)
@@ -106,6 +106,7 @@ func (e Embed) WSHandler(clickconn *clickhouse.Conn) http.HandlerFunc {
 		quitOrderbook := make(chan bool)
 		quitCandlesticks := make(chan bool)
 		quitTrades := make(chan bool)
+		quitUserData := make(chan bool)
 		for {
 			mt, msg, err := conn.ReadMessage()
 			logg.Info(msg)
@@ -127,6 +128,9 @@ func (e Embed) WSHandler(clickconn *clickhouse.Conn) http.HandlerFunc {
 				if dat.Stream == "trades" {
 					go connection.tradesHandler(clickconn, mt, dat, quitTrades, e)
 				}
+				if dat.Stream == "userData" {
+					go connection.userDataHandler(mt, dat, quitUserData, e)
+				}
 			}
 			if dat.Type == "unsubscribe" {
 				if dat.Stream == "orderbook" {
@@ -137,5 +141,3 @@ func (e Embed) WSHandler(clickconn *clickhouse.Conn) http.HandlerFunc {
 		}
 	}
 }
-
-
