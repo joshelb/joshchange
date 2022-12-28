@@ -16,6 +16,12 @@ type Response struct {
 	Data   interface{}
 }
 
+type UserData struct {
+	ActiveOrders [][]string
+	OrderHistory [][]string
+	TradeHistory [][]string
+}
+
 // Handling of Trade Data
 func (c *Connection) tradesHandler(clickhouseConn *clickhouse.Conn, mt int, msg WSStream, ch <-chan bool, e Embed) {
 	for {
@@ -171,7 +177,7 @@ func (c *Connection) userDataHandler(mt int, msg WSStream, ch <-chan bool, e Emb
 			for rows.Next() {
 				err = rows.Scan(&orderid, &userid, &side, &quantity, &price, &timestamp)
 				if err != nil {
-					logg.Error(err)
+					logg.Info(err)
 				}
 				result = append(result, []string{orderid, userid, side, quantity, price, timestamp})
 
@@ -179,9 +185,9 @@ func (c *Connection) userDataHandler(mt int, msg WSStream, ch <-chan bool, e Emb
 			rows.Close()
 			result2 = [][]string{}
 			for rows2.Next() {
-				err = rows.Scan(&orderid, &userid, &side, &quantity, &price, &timestamp)
+				err = rows2.Scan(&orderid, &userid, &side, &quantity, &price, &timestamp)
 				if err != nil {
-					logg.Error(err)
+					logg.Info(err)
 				}
 				result2 = append(result2, []string{orderid, userid, side, quantity, price, timestamp})
 
@@ -189,17 +195,16 @@ func (c *Connection) userDataHandler(mt int, msg WSStream, ch <-chan bool, e Emb
 			rows2.Close()
 			result3 = [][]string{}
 			for rows3.Next() {
-				err = rows.Scan(&orderid, &userid, &side, &quantity, &price, &timestamp)
+				err = rows3.Scan(&userid, &side, &quantity, &price, &timestamp)
 				if err != nil {
-					logg.Error(err)
+					logg.Info(err)
 				}
-				result3 = append(result3, []string{orderid, userid, side, quantity, price, timestamp})
+				result3 = append(result3, []string{userid, side, quantity, price, timestamp})
 
 			}
 			rows3.Close()
-			last_res := append(result, result2...)
-			last_res = append(last_res, result3...)
-			data := &Response{Stream: "userData", Data: last_res}
+			userData := &UserData{ActiveOrders: result, OrderHistory: result2, TradeHistory: result3}
+			data := &Response{Stream: "userData", Data: userData}
 			res, err := json.Marshal(data)
 			if err != nil {
 				logg.Error(err)

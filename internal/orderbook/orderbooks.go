@@ -46,31 +46,69 @@ func (o Orderbookcollection) Marketorder(obj Order, userid string) {
 		if err != nil {
 			logg.Error(err)
 		}
-		done, partial, _, _, err := orderBook.ProcessMarketOrder(ob.Sell, decimal.NewFromFloat(obj.Quantity))
+		done, partial, partialQuantityProcessed, _, err := orderBook.ProcessMarketOrder(ob.Sell, decimal.NewFromFloat(obj.Quantity))
+		if err != nil {
+			logg.Error(err)
+		}
+		trd, err := db.Prepare("INSERT INTO tradeHistory(userid,side,quantity,price,timestamp) VALUES(?,?,?,?,?)")
+		if err != nil {
+			logg.Error(err)
+		}
+		_, err = trd.Exec(userid, "sell", obj.Quantity, curPrice.String(), string(time.Now().Unix()))
 		if err != nil {
 			logg.Error(err)
 		}
 		for _, value := range done {
 			logg.Info(value.ID())
-			query := fmt.Sprintf("DELETE FROM orders WHERE orderid='%s'", value.ID())
-			stmt, err := db.Prepare(query)
+			stmt, err := db.Prepare("DELETE FROM orders WHERE orderid=?")
 			if err != nil {
 				logg.Error(err)
 			}
-			_, err = stmt.Exec()
+			_, err = stmt.Exec(value.ID())
 			if err != nil {
 				logg.Error(err)
+			}
+			stmt2, err := db.Prepare("INSERT INTO orderHistory(orderid, userid, side, quantity, price, timestamp) VALUES(?,?,?,?,?,?)")
+			if err != nil {
+				logg.Error(err)
+			}
+			quant, _ := (value.Quantity()).Float64()
+			_, err = stmt2.Exec(value.ID(), userid, (value.Side()).String(), quant, (value.Price()).String(), string(time.Now().Unix()))
+			if err != nil {
+				update, err := db.Prepare("UPDATE orderHistory SET quantity = quantity + ? WHERE orderid = ?")
+				if err != nil {
+					logg.Error(err)
+				}
+				_, err = update.Exec(quant, value.ID())
+				if err != nil {
+					logg.Error(err)
+				}
 			}
 		}
 		if partial != nil {
-			query := fmt.Sprintf("UPDATE orders SET quantity = '%s' WHERE orderid = '%s'", (partial.Quantity()).String(), partial.ID())
-			stmt, err := db.Prepare(query)
+			stmt, err := db.Prepare("UPDATE orders SET quantity = ? WHERE orderid = ?")
 			if err != nil {
 				logg.Error(err)
 			}
-			_, err = stmt.Exec()
+			_, err = stmt.Exec((partial.Quantity()).String(), partial.ID())
 			if err != nil {
 				logg.Error(err)
+			}
+			stmt2, err := db.Prepare("INSERT INTO orderHistory(orderid, userid, side, quantity, price, timestamp) VALUES(?,?,?,?,?,?)")
+			if err != nil {
+				logg.Error(err)
+			}
+			quant, _ := (partialQuantityProcessed).Float64()
+			_, err = stmt2.Exec(partial.ID(), userid, (partial.Side()).String(), quant, (partial.Price()).String(), string(time.Now().Unix()))
+			if err != nil {
+				update, err := db.Prepare("UPDATE orderHistory SET quantity = quantity + ? WHERE orderid = ?")
+				if err != nil {
+					logg.Error(err)
+				}
+				_, err = update.Exec(quant, partial.ID())
+				if err != nil {
+					logg.Error(err)
+				}
 			}
 		}
 
@@ -87,31 +125,69 @@ func (o Orderbookcollection) Marketorder(obj Order, userid string) {
 		if err != nil {
 			logg.Error(err)
 		}
-		done, partial, _, _, err := orderBook.ProcessMarketOrder(ob.Buy, decimal.NewFromFloat(obj.Quantity))
+		done, partial, partialQuantityProcessed, _, err := orderBook.ProcessMarketOrder(ob.Buy, decimal.NewFromFloat(obj.Quantity))
+		if err != nil {
+			logg.Error(err)
+		}
+		trd, err := db.Prepare("INSERT INTO tradeHistory(userid,side,quantity,price,timestamp) VALUES(?,?,?,?,?)")
+		if err != nil {
+			logg.Error(err)
+		}
+		_, err = trd.Exec(userid, "buy", obj.Quantity, curPrice.String(), string(time.Now().Unix()))
 		if err != nil {
 			logg.Error(err)
 		}
 		for _, value := range done {
 			logg.Info(value.ID())
-			query := fmt.Sprintf("DELETE FROM orders WHERE orderid='%s'", value.ID())
-			stmt, err := db.Prepare(query)
+			stmt, err := db.Prepare("DELETE FROM orders WHERE orderid=?")
 			if err != nil {
 				logg.Error(err)
 			}
-			_, err = stmt.Exec()
+			_, err = stmt.Exec(value.ID())
+			if err != nil {
+				logg.Info(err)
+			}
+			stmt2, err := db.Prepare("INSERT INTO orderHistory(orderid, userid, side, quantity, price, timestamp) VALUES(?,?,?,?,?,?)")
 			if err != nil {
 				logg.Error(err)
+			}
+			quant, _ := (value.Quantity()).Float64()
+			_, err = stmt2.Exec(value.ID(), userid, (value.Side()).String(), quant, (value.Price()).String(), string(time.Now().Unix()))
+			if err != nil {
+				update, err := db.Prepare("UPDATE orderHistory SET quantity = quantity + ? WHERE orderid = ?")
+				if err != nil {
+					logg.Error(err)
+				}
+				_, err = update.Exec(quant, value.ID())
+				if err != nil {
+					logg.Error(err)
+				}
 			}
 		}
 		if partial != nil {
-			query := fmt.Sprintf("UPDATE orders SET quantity = '%s' WHERE orderid = '%s'", (partial.Quantity()).String(), partial.ID())
-			stmt, err := db.Prepare(query)
+			stmt, err := db.Prepare("UPDATE orders SET quantity = ? WHERE orderid = ?")
 			if err != nil {
 				logg.Error(err)
 			}
-			_, err = stmt.Exec()
+			_, err = stmt.Exec((partial.Quantity()).String(), partial.ID())
 			if err != nil {
 				logg.Error(err)
+			}
+			stmt2, err := db.Prepare("INSERT INTO orderHistory(orderid, userid, side, quantity, price, timestamp) VALUES(?,?,?,?,?,?)")
+			if err != nil {
+				logg.Error(err)
+			}
+			quant, _ := (partialQuantityProcessed).Float64()
+			_, err = stmt2.Exec(partial.ID(), userid, (partial.Side()).String(), quant, (partial.Price()).String(), string(time.Now().Unix()))
+			if err != nil {
+				update, err := db.Prepare("UPDATE orderHistory SET quantity = quantity + ? WHERE orderid = ?")
+				if err != nil {
+					logg.Error(err)
+				}
+				_, err = update.Exec(quant, partial.ID())
+				if err != nil {
+					logg.Error(err)
+				}
 			}
 		}
 
@@ -132,83 +208,191 @@ func (o Orderbookcollection) Limitorder(obj Order, userid string) {
 	}
 	db := o.MySQLClient
 	if obj.Side == "sell" {
+		curPrice, err := orderBook.CalculatePriceAfterExecution(ob.Sell, decimal.NewFromFloat(obj.Quantity))
+		if err != nil {
+			logg.Error(err)
+		}
 		ID := xid.New().String()
-		done, partial, _, err := orderBook.ProcessLimitOrder(ob.Sell, ID, decimal.NewFromFloat(obj.Quantity), decimal.NewFromFloat(obj.Price))
+		done, partial, partialQuantityProcessed, err := orderBook.ProcessLimitOrder(ob.Sell, ID, decimal.NewFromFloat(obj.Quantity), decimal.NewFromFloat(obj.Price))
 		if err != nil {
 			logg.Error(err)
 		}
 		if done == nil && partial == nil {
-			query := fmt.Sprintf("INSERT INTO orders(orderid, userid, side, quantity, price, timestamp) VALUES('%s','%s','sell','%s','%s','%s')", ID, userid, fmt.Sprintf("%f", obj.Quantity), fmt.Sprintf("%f", obj.Price), string(time.Now().Unix()))
-			stmt, err := db.Prepare(query)
+			stmt, err := db.Prepare("INSERT INTO orders(orderid, userid, side, quantity, price, timestamp) VALUES(?,?,?,?,?,?)")
 			if err != nil {
 				logg.Error(err)
 			}
-			_, err = stmt.Exec()
+			_, err = stmt.Exec(ID, userid, "sell", fmt.Sprintf("%f", obj.Quantity), fmt.Sprintf("%f", obj.Price), string(time.Now().Unix()))
 			if err != nil {
 				logg.Error(err)
 			}
 			return
 		}
+		trd, err := db.Prepare("INSERT INTO tradeHistory(userid,side,quantity,price,timestamp) VALUES(?,'sell',?,?,?)")
+		if err != nil {
+			logg.Error(err)
+		}
+		_, err = trd.Exec(userid, obj.Quantity, curPrice.String(), string(time.Now().Unix()))
+		if err != nil {
+			logg.Error(err)
+		}
 		for _, value := range done {
-			query := fmt.Sprintf("DELETE FROM orders WHERE orderid='%s'", value.ID())
-			stmt, err := db.Prepare(query)
+			stmt, err := db.Prepare("DELETE FROM orders WHERE orderid=?")
 			if err != nil {
 				logg.Error(err)
 			}
-			_, err = stmt.Exec()
+			_, err = stmt.Exec(value.ID())
 			if err != nil {
 				logg.Error(err)
+			}
+			stmt2, err := db.Prepare("INSERT INTO orderHistory(orderid, userid, side, quantity, price, timestamp) VALUES(?,?,?,?,?,?)")
+			if err != nil {
+				logg.Error(err)
+			}
+			quant, _ := (value.Quantity()).Float64()
+			_, err = stmt2.Exec(value.ID(), userid, (value.Side()).String(), quant, (value.Price()).String(), string(time.Now().Unix()))
+			if err != nil {
+				update, err := db.Prepare("UPDATE orderHistory SET quantity = quantity + ? WHERE orderid = ?")
+				if err != nil {
+					logg.Error(err)
+				}
+				_, err = update.Exec(quant, value.ID())
+				if err != nil {
+					logg.Error(err)
+				}
 			}
 
 		}
 		if partial != nil {
-			query := fmt.Sprintf("UPDATE orders SET quantity = '%s' WHERE orderid = '%s'", (partial.Quantity()).String(), partial.ID())
-			stmt, err := db.Prepare(query)
+			stmt, err := db.Prepare("UPDATE orders SET quantity = ? WHERE orderid = ?")
 			if err != nil {
 				logg.Error(err)
 			}
-			_, err = stmt.Exec()
+			_, err = stmt.Exec((partial.Quantity()).String(), partial.ID())
+			if err != nil {
+				logg.Error(err)
+			}
+			stmt2, err := db.Prepare("INSERT INTO orderHistory(orderid, userid, side, quantity, price, timestamp) VALUES(?,?,?,?,?,?)")
+			if err != nil {
+				logg.Error(err)
+			}
+			quant, _ := (partialQuantityProcessed).Float64()
+			_, err = stmt2.Exec(partial.ID(), userid, (partial.Side()).String(), quant, (partial.Price()).String(), string(time.Now().Unix()))
+			if err != nil {
+				update, err := db.Prepare("UPDATE orderHistory SET quantity = quantity + ? WHERE orderid = ?")
+				if err != nil {
+					logg.Error(err)
+				}
+				_, err = update.Exec(quant, partial.ID())
+				if err != nil {
+					logg.Error(err)
+				}
+			}
+		}
+		restOrder := orderBook.Order(ID)
+		if restOrder != nil {
+			stmt, err := db.Prepare("INSERT INTO orders(orderid, userid, side, quantity, price, timestamp) VALUES(?,?,?,?,?,?)")
+			if err != nil {
+				logg.Error(err)
+			}
+			quant, _ := (restOrder.Quantity()).Float64()
+			_, err = stmt.Exec(ID, userid, (restOrder.Side()).String(), quant, (restOrder.Price()).String(), string(time.Now().Unix()))
 			if err != nil {
 				logg.Error(err)
 			}
 		}
 	}
 	if obj.Side == "buy" {
-		ID := xid.New().String()
-		done, partial, _, err := orderBook.ProcessLimitOrder(ob.Buy, ID, decimal.NewFromFloat(obj.Quantity), decimal.NewFromFloat(obj.Price))
+		curPrice, err := orderBook.CalculatePriceAfterExecution(ob.Buy, decimal.NewFromFloat(obj.Quantity))
 		if err != nil {
 			logg.Error(err)
 		}
+		ID := xid.New().String()
+		done, partial, partialQuantityProcessed, err := orderBook.ProcessLimitOrder(ob.Buy, ID, decimal.NewFromFloat(obj.Quantity), decimal.NewFromFloat(obj.Price))
+		if err != nil {
+			logg.Error(err)
+		}
+		logg.Info(done)
+		logg.Info(partial)
 		if done == nil && partial == nil {
-			query := fmt.Sprintf("INSERT INTO orders(orderid, userid, side, quantity, price, timestamp) VALUES('%s','%s','buy','%s','%s','%s')", ID, userid, fmt.Sprintf("%f", obj.Quantity), fmt.Sprintf("%f", obj.Price), string(time.Now().Unix()))
-			stmt, err := db.Prepare(query)
+			stmt, err := db.Prepare("INSERT INTO orders(orderid, userid, side, quantity, price, timestamp) VALUES(?,?,?,?,?,?)")
 			if err != nil {
 				logg.Error(err)
 			}
-			_, err = stmt.Exec()
+			_, err = stmt.Exec(ID, userid, "buy", fmt.Sprintf("%f", obj.Quantity), fmt.Sprintf("%f", obj.Price), string(time.Now().Unix()))
 			if err != nil {
 				logg.Error(err)
 			}
 			return
 		}
+		trd, err := db.Prepare("INSERT INTO tradeHistory(userid,side,quantity,price,timestamp) VALUES(?,'buy',?,?,?)")
+		if err != nil {
+			logg.Error(err)
+		}
+		_, err = trd.Exec(userid, obj.Quantity, curPrice.String(), string(time.Now().Unix()))
+		if err != nil {
+			logg.Error(err)
+		}
 		for _, value := range done {
-			query := fmt.Sprintf("DELETE FROM orders WHERE orderid='%s'", value.ID())
-			stmt, err := db.Prepare(query)
+			stmt, err := db.Prepare("DELETE FROM orders WHERE orderid=?")
 			if err != nil {
 				logg.Error(err)
 			}
-			_, err = stmt.Exec()
+			_, err = stmt.Exec(value.ID())
 			if err != nil {
 				logg.Error(err)
+			}
+			stmt2, err := db.Prepare("INSERT INTO orderHistory(orderid, userid, side, quantity, price, timestamp) VALUES(?,?,?,?,?,?)")
+			if err != nil {
+				logg.Error(err)
+			}
+			quant, _ := (value.Quantity()).Float64()
+			_, err = stmt2.Exec(value.ID(), userid, (value.Side()).String(), quant, (value.Price()).String(), string(time.Now().Unix()))
+			if err != nil {
+				update, err := db.Prepare("UPDATE orderHistory SET quantity = quantity + ? WHERE orderid = ?")
+				if err != nil {
+					logg.Error(err)
+				}
+				_, err = update.Exec(quant, value.ID())
+				if err != nil {
+					logg.Error(err)
+				}
 			}
 		}
 		if partial != nil {
-			query := fmt.Sprintf("UPDATE orders SET quantity = '%s' WHERE orderid = '%s'", (partial.Quantity()).String(), partial.ID())
-			stmt, err := db.Prepare(query)
+			stmt, err := db.Prepare("UPDATE orders SET quantity = ? WHERE orderid = ?")
 			if err != nil {
 				logg.Error(err)
 			}
-			_, err = stmt.Exec()
+			_, err = stmt.Exec((partial.Quantity()).String(), partial.ID())
+			if err != nil {
+				logg.Error(err)
+			}
+			stmt2, err := db.Prepare("INSERT INTO orderHistory(orderid, userid, side, quantity, price, timestamp) VALUES(?,?,?,?,?,?)")
+			if err != nil {
+				logg.Error(err)
+			}
+			quant, _ := (partialQuantityProcessed).Float64()
+			_, err = stmt2.Exec(partial.ID(), userid, (partial.Side()).String(), quant, (partial.Price()).String(), string(time.Now().Unix()))
+			if err != nil {
+				update, err := db.Prepare("UPDATE orderHistory SET quantity = quantity + ? WHERE orderid = ?")
+				if err != nil {
+					logg.Error(err)
+				}
+				_, err = update.Exec(quant, partial.ID())
+				if err != nil {
+					logg.Error(err)
+				}
+			}
+		}
+		restOrder := orderBook.Order(ID)
+		if restOrder != nil {
+			stmt, err := db.Prepare("INSERT INTO orders(orderid, userid, side, quantity, price, timestamp) VALUES(?,?,?,?,?,?)")
+			if err != nil {
+				logg.Error(err)
+			}
+			quant, _ := (restOrder.Quantity()).Float64()
+			_, err = stmt.Exec(ID, userid, (restOrder.Side()).String(), quant, (restOrder.Price()).String(), string(time.Now().Unix()))
 			if err != nil {
 				logg.Error(err)
 			}
