@@ -15,7 +15,6 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/gorilla/mux"
 	oj "github.com/joshelb/joshchange/internal/orderbook"
-	"github.com/roistat/go-clickhouse"
 	"github.com/rs/cors"
 	logg "github.com/sirupsen/logrus"
 )
@@ -28,8 +27,7 @@ func New() {
 	}
 	defer db.Close()
 
-	conn := clickhouse.NewConn("localhost:8123", clickhouse.NewHttpTransport())
-	collection := &oj.Orderbookcollection{ClickhouseClient: conn, MySQLClient: db}
+	collection := &oj.Orderbookcollection{MySQLClient: db}
 	collection.InitOrderbook("btcusd")
 	// var of Embed struct to pass Orderbookcollection to Handler
 	embed := &Embed{
@@ -42,7 +40,7 @@ func New() {
 	orderhandler_update := cors.AllowAll().Handler(middleware.CheckJWT(orderhandler))
 	registerhandler := http.HandlerFunc(RegisterHandler(db))
 	registerhandler_update := cors.AllowAll().Handler(registerhandler)
-	wshandler := http.HandlerFunc(embed.WSHandler(conn))
+	wshandler := http.HandlerFunc(embed.WSHandler())
 	wshandler_update := cors.AllowAll().Handler(wshandler)
 
 	router := mux.NewRouter()

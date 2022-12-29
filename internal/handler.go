@@ -12,7 +12,6 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/gorilla/websocket"
 	"github.com/joshelb/joshchange/internal/orderbook"
-	"github.com/roistat/go-clickhouse"
 	logg "github.com/sirupsen/logrus"
 )
 
@@ -94,7 +93,7 @@ func (e Embed) OrderHandler(writer http.ResponseWriter, r *http.Request) {
 }
 
 // WS Handler for Datastream to Frontend
-func (e Embed) WSHandler(clickconn *clickhouse.Conn) http.HandlerFunc {
+func (e Embed) WSHandler() http.HandlerFunc {
 	return func(writer http.ResponseWriter, r *http.Request) {
 		conn, err := upgrader.Upgrade(writer, r, nil)
 		if err != nil {
@@ -123,10 +122,10 @@ func (e Embed) WSHandler(clickconn *clickhouse.Conn) http.HandlerFunc {
 					go connection.orderbookHandler(mt, dat, quitOrderbook, e)
 				}
 				if dat.Stream == "candlesticks" {
-					go candlesticksHandler(clickconn, conn, mt, dat, quitCandlesticks, e)
+					go candlesticksHandler(conn, mt, dat, quitCandlesticks, e)
 				}
 				if dat.Stream == "trades" {
-					go connection.tradesHandler(clickconn, mt, dat, quitTrades, e)
+					go connection.tradesHandler(mt, dat, quitTrades, e)
 				}
 				if dat.Stream == "userData" {
 					go connection.userDataHandler(mt, dat, quitUserData, e)

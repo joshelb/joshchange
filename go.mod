@@ -18,7 +18,7 @@ require (
 	github.com/go-sql-driver/mysql v1.7.0 // indirect
 	github.com/gorilla/handlers v1.5.1 // indirect
 	github.com/gorilla/websocket v1.5.0 // indirect
-	github.com/joshelb/orderbook v0.0.0-20221222145547-fca693af1a92 // indirect
+	github.com/joshelb/orderbook v0.0.0-20221229005824-c71541044754 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/rs/cors v1.8.2 // indirect
 	golang.org/x/crypto v0.0.0-20220518034528-6f7dac969898 // indirect
