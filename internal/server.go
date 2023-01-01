@@ -38,6 +38,8 @@ func New() {
 	orderhandler := http.HandlerFunc(embed.OrderHandler)
 	// Allow CORS and check Athorization Token with the JWT middleware
 	orderhandler_update := cors.AllowAll().Handler(middleware.CheckJWT(orderhandler))
+	cancelhandler := http.HandlerFunc(embed.CancelHandler)
+	cancelhandler_update := cors.AllowAll().Handler(middleware.CheckJWT(cancelhandler))
 	registerhandler := http.HandlerFunc(RegisterHandler(db))
 	registerhandler_update := cors.AllowAll().Handler(registerhandler)
 	wshandler := http.HandlerFunc(embed.WSHandler())
@@ -46,8 +48,10 @@ func New() {
 	router := mux.NewRouter()
 	router.PathPrefix("/assets/").Handler(http.StripPrefix("/assets/", fs))
 	router.Handle("/order", orderhandler_update)
+	router.Handle("/cancel", cancelhandler_update)
 	router.Handle("/wsdata", wshandler_update)
 	router.Handle("/registerDBEntry", registerhandler_update)
+	router.HandleFunc("/silvester", SilvesterHandler)
 
 	err = http.ListenAndServe(":8080", router)
 	if err != nil {

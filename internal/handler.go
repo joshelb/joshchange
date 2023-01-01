@@ -61,14 +61,61 @@ func RegisterHandler(conn *sql.DB) http.HandlerFunc {
 			logg.Error(err)
 		}
 		user_id := usr.UserID
-		query := fmt.Sprintf("INSERT INTO users (user_id) VALUES (%s)", user_id)
-		insert, err := conn.Query(query)
+		tx, err := conn.Begin()
 		if err != nil {
 			logg.Error(err)
 		}
-		defer insert.Close()
+		/*
+			insertUserquery := "INSERT INTO users (user_id) VALUES (?)"
+			_, err = tx.Exec(insertUserquery, user_id)
+			if err != nil {
+				logg.Error(err)
+			}
+		*/
+		getAllWalletsquery := "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES  WHERE TABLE_NAME LIKE 'wallet%';"
+		rows, err := conn.Query(getAllWalletsquery)
+		if err != nil {
+			logg.Error(err)
+		}
+		var name string
+		for rows.Next() {
+			err = rows.Scan(&name)
+			if err != nil {
+				logg.Info(err)
+			}
+			logg.Info(name)
+			query := fmt.Sprintf("INSERT INTO %s(Balance, userid, AvailableBalance) VALUES (0,?,0)", name)
+			_, err = tx.Exec(query, user_id)
+			if err != nil {
+				tx.Rollback()
+				logg.Error(err)
+				return
+			}
+		}
+		err = tx.Commit()
+		if err != nil {
+			logg.Error(err)
+		}
+
 		logg.Info("###############################################")
 	}
+}
+
+func (e Embed) CancelHandler(writer http.ResponseWriter, r *http.Request) {
+	claims := r.Context().Value(jwtmiddleware.ContextKey{}).(*validator.ValidatedClaims)
+	customClaims := claims.CustomClaims.(*CustomClaimsExample)
+	writer.Header().Set("Content-Type", "application/json")
+	writer.WriteHeader(http.StatusOK)
+	var orderToCancel orderbook.CancelOrder
+	err := json.NewDecoder(r.Body).Decode(&orderToCancel)
+	if err != nil {
+		logg.Error(err)
+	}
+	err = e.Collection.Cancelorder(orderToCancel, customClaims.UserID)
+	if err != nil {
+		writer.Write([]byte(err.Error()))
+	}
+
 }
 
 // Handles incoming Orders
@@ -90,6 +137,11 @@ func (e Embed) OrderHandler(writer http.ResponseWriter, r *http.Request) {
 		e.Collection.Limitorder(order, customClaims.UserID)
 	}
 	logg.Info(e.Collection.Map.Load("btcusd"))
+}
+
+func SilvesterHandler(writer http.ResponseWriter, r *http.Request) {
+	http.ServeFile(writer, r, "templates/snowflake-snippet.html")
+
 }
 
 // WS Handler for Datastream to Frontend

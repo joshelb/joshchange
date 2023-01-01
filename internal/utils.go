@@ -77,6 +77,7 @@ func (c *Connection) userDataHandler(mt int, msg WSStream, ch <-chan bool, e Emb
 	var result2 [][]string
 	var result3 [][]string
 	var (
+		uniqueid  string
 		orderid   string
 		userid    string
 		side      string
@@ -139,11 +140,11 @@ func (c *Connection) userDataHandler(mt int, msg WSStream, ch <-chan bool, e Emb
 			rows2.Close()
 			result3 = [][]string{}
 			for rows3.Next() {
-				err = rows3.Scan(&userid, &side, &quantity, &price, &timestamp)
+				err = rows3.Scan(&uniqueid, &userid, &side, &quantity, &price, &timestamp)
 				if err != nil {
 					logg.Info(err)
 				}
-				result3 = append(result3, []string{userid, side, quantity, price, timestamp})
+				result3 = append(result3, []string{uniqueid, userid, side, quantity, price, timestamp})
 
 			}
 			rows3.Close()
@@ -158,6 +159,9 @@ func (c *Connection) userDataHandler(mt int, msg WSStream, ch <-chan bool, e Emb
 				logg.Info("broke")
 				return
 			}
+			stmt.Close()
+			stmt2.Close()
+			stmt3.Close()
 			time.Sleep(1000 * time.Millisecond)
 		}
 	}
