@@ -1,11 +1,14 @@
 package server
 
 import (
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/joshelb/joshchange/internal/orderbook"
 	logg "github.com/sirupsen/logrus"
 )
 
@@ -23,11 +26,49 @@ type UserData struct {
 
 // Handling of Trade Data
 func (c *Connection) tradesHandler(mt int, msg WSStream, ch <-chan bool, e Embed) {
+	db := e.Collection.MySQLClient
+	var (
+		uniqueid  string
+		userid    string
+		side      string
+		quantity  string
+		price     string
+		timestamp string
+	)
 	for {
 		select {
 		case <-ch:
 			return
 		default:
+			query := "SELECT * FROM tradeHistory"
+			stmt, err := db.Prepare(query)
+			if err != nil {
+				logg.Error(err)
+			}
+			resp, err := stmt.Query()
+			if err != nil {
+				logg.Error(err)
+			}
+			result := [][]string{}
+			for resp.Next() {
+				err = resp.Scan(&uniqueid, &userid, &side, &quantity, &price, &timestamp)
+				if err != nil {
+					logg.Info(err)
+				}
+				result = append(result, []string{uniqueid, side, quantity, price, timestamp})
+			}
+			stmt.Close()
+			resp.Close()
+			data := &Response{Stream: "trades", Data: result}
+			res, err := json.Marshal(data)
+			if err != nil {
+				logg.Error(err)
+			}
+			err = c.Send(mt, res)
+			if err != nil {
+				logg.Info("broke")
+				return
+			}
 			time.Sleep(500 * time.Millisecond)
 		}
 	}
@@ -173,4 +214,49 @@ func (c *Connection) Send(mt int, message []byte) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.Socket.WriteMessage(mt, message)
+}
+
+func isOrderPossible(obj orderbook.Order, db *sql.DB) error {
+	//symbol := obj.Symbol
+	quantity := obj.Quantity
+	price := obj.Price
+	side := obj.Side
+	tx, err := db.Begin()
+	if err != nil {
+		logg.Error(err)
+	}
+	if side == "sell" {
+		query := fmt.Sprintf("UPDATE %s  SET AvailableBalance = CASE     WHEN AvailableBalance < ? THEN AvailableBalance     ELSE AvailableBalance - ?     END", "walletbtc")
+		results, err := tx.Exec(query, quantity, quantity)
+		if err != nil {
+			logg.Error(err)
+		}
+		rowsAffected, err := results.RowsAffected()
+		if err != nil {
+			logg.Error(err)
+		}
+		if rowsAffected < 1 {
+			tx.Commit()
+			return errors.New("order not possible")
+		}
+	}
+	if side == "buy" {
+		query := fmt.Sprintf("UPDATE %s  SET AvailableBalance = CASE     WHEN AvailableBalance < ? THEN AvailableBalance     ELSE AvailableBalance - ?     END", "walletusd")
+		results, err := tx.Exec(query, quantity*price, quantity*price)
+		if err != nil {
+			logg.Error(err)
+		}
+		logg.Info(results)
+		rowsAffected, err := results.RowsAffected()
+		if err != nil {
+			logg.Error(err)
+		}
+		if rowsAffected < 1 {
+			tx.Commit()
+			return errors.New("order not possible")
+		}
+	}
+	tx.Commit()
+	return nil
+
 }

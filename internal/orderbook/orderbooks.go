@@ -103,6 +103,7 @@ func (o Orderbookcollection) Marketorder(obj Order, userid string) {
 		done, partial, partialQuantityProcessed, quantityLeft, err := orderBook.ProcessMarketOrder(ob.Sell, decimal.NewFromFloat(obj.Quantity))
 		if err != nil {
 			logg.Error(err)
+			return
 		}
 		tradequery := "INSERT INTO tradeHistory(uniqueid,userid,side,quantity,price,timestamp) VALUES(?,?,?,?,?,?)"
 		quan, _ := (quantityLeft.Float64())
@@ -127,6 +128,7 @@ func (o Orderbookcollection) Marketorder(obj Order, userid string) {
 		done, partial, partialQuantityProcessed, quantityLeft, err := orderBook.ProcessMarketOrder(ob.Buy, decimal.NewFromFloat(obj.Quantity))
 		if err != nil {
 			logg.Error(err)
+			return
 		}
 		tradequery := "INSERT INTO tradeHistory(uniqueid,userid,side,quantity,price,timestamp) VALUES(?,?,?,?,?,?)"
 		quan, _ := (quantityLeft.Float64())
@@ -178,7 +180,14 @@ func (o Orderbookcollection) Limitorder(obj Order, userid string) {
 		if restOrder != nil {
 			quant, _ := (restOrder.Quantity()).Float64()
 			price, _ := (restOrder.Price()).Float64()
+			side := (restOrder.Side()).String()
 			insertOrders(tx, db, (restOrder.Side()).String(), quant, price, userid, ID)
+			if side == "sell" {
+				updateAvailableBalance(tx, userid, quant, "walletbtc")
+			}
+			if side == "buy" {
+				updateAvailableBalance(tx, userid, quant*price, "walletusd")
+			}
 		}
 		err = tx.Commit()
 		if err != nil {
@@ -207,7 +216,14 @@ func (o Orderbookcollection) Limitorder(obj Order, userid string) {
 		if restOrder != nil {
 			quant, _ := (restOrder.Quantity()).Float64()
 			price, _ := (restOrder.Price()).Float64()
+			side := (restOrder.Side()).String()
 			insertOrders(tx, db, (restOrder.Side()).String(), quant, price, userid, ID)
+			if side == "sell" {
+				updateAvailableBalance(tx, userid, quant, "walletbtc")
+			}
+			if side == "buy" {
+				updateAvailableBalance(tx, userid, quant*price, "walletusd")
+			}
 		}
 		err = tx.Commit()
 		if err != nil {
@@ -224,12 +240,6 @@ func insertOrders(tx *sql.Tx, db *sql.DB, side string, quantity float64, price f
 		tx.Rollback()
 		logg.Error(err)
 		return
-	}
-	if side == "sell" {
-		updateAvailableBalance(tx, userid, quantity, "walletbtc")
-	}
-	if side == "buy" {
-		updateAvailableBalance(tx, userid, quantity*price, "walletusd")
 	}
 }
 
@@ -265,13 +275,13 @@ func processWalletTransaction(tx *sql.Tx, side string, db *sql.DB, user1 string,
 			logg.Error(err)
 			return
 		}
-		_, err = tx.Exec(query3, quantity, quantity, user1)
+		_, err = tx.Exec(query3, quantity, 0, user1)
 		if err != nil {
 			tx.Rollback()
 			logg.Error(err)
 			return
 		}
-		_, err = tx.Exec(query4, quantity*price, quantity*price, user2)
+		_, err = tx.Exec(query4, quantity*price, 0, user2)
 		if err != nil {
 			tx.Rollback()
 			logg.Error(err)
@@ -291,13 +301,13 @@ func processWalletTransaction(tx *sql.Tx, side string, db *sql.DB, user1 string,
 			logg.Error(err)
 			return
 		}
-		_, err = tx.Exec(query3, quantity, quantity, user2)
+		_, err = tx.Exec(query3, quantity, 0, user2)
 		if err != nil {
 			tx.Rollback()
 			logg.Error(err)
 			return
 		}
-		_, err = tx.Exec(query4, quantity*price, quantity*price, user1)
+		_, err = tx.Exec(query4, quantity*price, 0, user1)
 		if err != nil {
 			tx.Rollback()
 			logg.Error(err)
