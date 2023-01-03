@@ -141,7 +141,6 @@ func (e Embed) OrderHandler(writer http.ResponseWriter, r *http.Request) {
 	if order.Ordertype == "limit" {
 		e.Collection.Limitorder(order, customClaims.UserID)
 	}
-	logg.Info(e.Collection.Map.Load("btcusd"))
 }
 
 func SilvesterHandler(writer http.ResponseWriter, r *http.Request) {

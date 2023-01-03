@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -41,6 +42,9 @@ func (o *Orderbookcollection) InitOrderbook(symbol string) {
 
 func (o Orderbookcollection) Cancelorder(obj CancelOrder, userid string) error {
 	orderBook, err := o.GetOrderbook_bySymbol(obj.Symbol)
+	symbols := strings.Split((obj.Symbol), ":")
+	symbol1 := symbols[0]
+	symbol2 := symbols[1]
 	if err != nil {
 		logg.Error(err)
 	}
@@ -63,14 +67,14 @@ func (o Orderbookcollection) Cancelorder(obj CancelOrder, userid string) error {
 	quan, _ := (order.Quantity()).Float64()
 	price, _ := (order.Price()).Float64()
 	if (order.Side()).String() == "buy" {
-		addAvailableBalancebackquery := fmt.Sprintf("Update %s SET AvailableBalance = AvailableBalance + ?  WHERE userid = ?", "walletusd")
+		addAvailableBalancebackquery := fmt.Sprintf("Update %s SET AvailableBalance = AvailableBalance + ?  WHERE userid = ?", ("wallet" + symbol2))
 		_, err := tx.Exec(addAvailableBalancebackquery, quan*price, userid)
 		if err != nil {
 			logg.Error(err)
 		}
 	}
 	if (order.Side()).String() == "sell" {
-		addAvailableBalancebackquery := fmt.Sprintf("Update %s SET AvailableBalance = AvailableBalance + ?  WHERE userid = ?", "walletbtc")
+		addAvailableBalancebackquery := fmt.Sprintf("Update %s SET AvailableBalance = AvailableBalance + ?  WHERE userid = ?", ("wallet" + symbol1))
 		_, err := tx.Exec(addAvailableBalancebackquery, quan, userid)
 		if err != nil {
 			logg.Error(err)
@@ -87,6 +91,9 @@ func (o Orderbookcollection) Cancelorder(obj CancelOrder, userid string) error {
 
 func (o Orderbookcollection) Marketorder(obj Order, userid string) {
 	orderBook, err := o.GetOrderbook_bySymbol(obj.Symbol)
+	symbols := strings.Split((obj.Symbol), ":")
+	symbol1 := symbols[0]
+	symbol2 := symbols[1]
 	if err != nil {
 		logg.Error(err)
 	}
@@ -114,7 +121,7 @@ func (o Orderbookcollection) Marketorder(obj Order, userid string) {
 			logg.Error(err)
 			return
 		}
-		processOrders(tx, "x", db, done, partial, userid, partialQuantityProcessed, "btc", "usd")
+		processOrders(tx, "x", db, done, partial, userid, partialQuantityProcessed, symbol1, symbol2)
 		err = tx.Commit()
 		if err != nil {
 			logg.Error(err)
@@ -139,7 +146,7 @@ func (o Orderbookcollection) Marketorder(obj Order, userid string) {
 			logg.Error(err)
 			return
 		}
-		processOrders(tx, "x", db, done, partial, userid, partialQuantityProcessed, "btc", "usd")
+		processOrders(tx, "x", db, done, partial, userid, partialQuantityProcessed, symbol1, symbol2)
 		err = tx.Commit()
 		if err != nil {
 			logg.Error(err)
@@ -149,6 +156,9 @@ func (o Orderbookcollection) Marketorder(obj Order, userid string) {
 
 func (o Orderbookcollection) Limitorder(obj Order, userid string) {
 	orderBook, err := o.GetOrderbook_bySymbol(obj.Symbol)
+	symbols := strings.Split((obj.Symbol), ":")
+	symbol1 := symbols[0]
+	symbol2 := symbols[1]
 	if err != nil {
 		logg.Error(err)
 	}
@@ -175,7 +185,7 @@ func (o Orderbookcollection) Limitorder(obj Order, userid string) {
 			return
 		}
 		logg.Info("hi")
-		processOrders(tx, ID, db, done, partial, userid, partialQuantityProcessed, "btc", "usd")
+		processOrders(tx, ID, db, done, partial, userid, partialQuantityProcessed, symbol1, symbol2)
 		restOrder := orderBook.Order(ID)
 		if restOrder != nil {
 			quant, _ := (restOrder.Quantity()).Float64()
@@ -183,10 +193,10 @@ func (o Orderbookcollection) Limitorder(obj Order, userid string) {
 			side := (restOrder.Side()).String()
 			insertOrders(tx, db, (restOrder.Side()).String(), quant, price, userid, ID)
 			if side == "sell" {
-				updateAvailableBalance(tx, userid, quant, "walletbtc")
+				updateAvailableBalance(tx, userid, quant, ("wallet" + symbol1))
 			}
 			if side == "buy" {
-				updateAvailableBalance(tx, userid, quant*price, "walletusd")
+				updateAvailableBalance(tx, userid, quant*price, ("wallet" + symbol2))
 			}
 		}
 		err = tx.Commit()
@@ -211,7 +221,7 @@ func (o Orderbookcollection) Limitorder(obj Order, userid string) {
 			}
 			return
 		}
-		processOrders(tx, ID, db, done, partial, userid, partialQuantityProcessed, "btc", "usd")
+		processOrders(tx, ID, db, done, partial, userid, partialQuantityProcessed, symbol1, symbol2)
 		restOrder := orderBook.Order(ID)
 		if restOrder != nil {
 			quant, _ := (restOrder.Quantity()).Float64()
@@ -219,10 +229,10 @@ func (o Orderbookcollection) Limitorder(obj Order, userid string) {
 			side := (restOrder.Side()).String()
 			insertOrders(tx, db, (restOrder.Side()).String(), quant, price, userid, ID)
 			if side == "sell" {
-				updateAvailableBalance(tx, userid, quant, "walletbtc")
+				updateAvailableBalance(tx, userid, quant, ("wallet" + symbol1))
 			}
 			if side == "buy" {
-				updateAvailableBalance(tx, userid, quant*price, "walletusd")
+				updateAvailableBalance(tx, userid, quant*price, ("wallet" + symbol2))
 			}
 		}
 		err = tx.Commit()

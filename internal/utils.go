@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -19,9 +20,10 @@ type Response struct {
 }
 
 type UserData struct {
-	ActiveOrders [][]string
-	OrderHistory [][]string
-	TradeHistory [][]string
+	ActiveOrders   [][]string
+	OrderHistory   [][]string
+	TradeHistory   [][]string
+	WalletBalances map[string][]float64
 }
 
 // Handling of Trade Data
@@ -134,7 +136,34 @@ func (c *Connection) userDataHandler(mt int, msg WSStream, ch <-chan bool, e Emb
 			query := fmt.Sprintf("SELECT * FROM orders WHERE userid='%s'", msg.Email)
 			query2 := fmt.Sprintf("SELECT * FROM orderHistory WHERE userid='%s'", msg.Email)
 			query3 := fmt.Sprintf("SELECT * FROM tradeHistory WHERE userid='%s'", msg.Email)
-
+			getAllWalletsquery := "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES  WHERE TABLE_NAME LIKE 'wallet%';"
+			names, err := db.Query(getAllWalletsquery)
+			if err != nil {
+				logg.Error(err)
+			}
+			var name string
+			var AvailableBalance float64
+			var Balance float64
+			m := make(map[string][]float64)
+			for names.Next() {
+				err = names.Scan(&name)
+				if err != nil {
+					logg.Error(err)
+				}
+				query := fmt.Sprintf("SELECT AvailableBalance,Balance FROM %s WHERE userid = ?", name)
+				rows, err := db.Query(query, msg.Email)
+				if err != nil {
+					logg.Error(err)
+				}
+				for rows.Next() {
+					err := rows.Scan(&AvailableBalance, &Balance)
+					if err != nil {
+						logg.Error(err)
+					}
+					m[(name[6:])] = []float64{AvailableBalance, Balance}
+				}
+				rows.Close()
+			}
 			stmt, err := db.Prepare(query)
 			if err != nil {
 				logg.Error(err)
@@ -189,7 +218,7 @@ func (c *Connection) userDataHandler(mt int, msg WSStream, ch <-chan bool, e Emb
 
 			}
 			rows3.Close()
-			userData := &UserData{ActiveOrders: result, OrderHistory: result2, TradeHistory: result3}
+			userData := &UserData{ActiveOrders: result, OrderHistory: result2, TradeHistory: result3, WalletBalances: m}
 			data := &Response{Stream: "userData", Data: userData}
 			res, err := json.Marshal(data)
 			if err != nil {
@@ -217,7 +246,9 @@ func (c *Connection) Send(mt int, message []byte) error {
 }
 
 func isOrderPossible(obj orderbook.Order, db *sql.DB) error {
-	//symbol := obj.Symbol
+	symbols := strings.Split((obj.Symbol), ":")
+	symbol1 := symbols[0]
+	symbol2 := symbols[1]
 	quantity := obj.Quantity
 	price := obj.Price
 	side := obj.Side
@@ -226,7 +257,7 @@ func isOrderPossible(obj orderbook.Order, db *sql.DB) error {
 		logg.Error(err)
 	}
 	if side == "sell" {
-		query := fmt.Sprintf("UPDATE %s  SET AvailableBalance = CASE     WHEN AvailableBalance < ? THEN AvailableBalance     ELSE AvailableBalance - ?     END", "walletbtc")
+		query := fmt.Sprintf("UPDATE %s  SET AvailableBalance = CASE     WHEN AvailableBalance < ? THEN AvailableBalance     ELSE AvailableBalance - ?     END", ("wallet" + symbol1))
 		results, err := tx.Exec(query, quantity, quantity)
 		if err != nil {
 			logg.Error(err)
@@ -241,7 +272,7 @@ func isOrderPossible(obj orderbook.Order, db *sql.DB) error {
 		}
 	}
 	if side == "buy" {
-		query := fmt.Sprintf("UPDATE %s  SET AvailableBalance = CASE     WHEN AvailableBalance < ? THEN AvailableBalance     ELSE AvailableBalance - ?     END", "walletusd")
+		query := fmt.Sprintf("UPDATE %s  SET AvailableBalance = CASE     WHEN AvailableBalance < ? THEN AvailableBalance     ELSE AvailableBalance - ?     END", ("wallet" + symbol2))
 		results, err := tx.Exec(query, quantity*price, quantity*price)
 		if err != nil {
 			logg.Error(err)
