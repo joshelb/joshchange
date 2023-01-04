@@ -26,6 +26,52 @@ type UserData struct {
 	WalletBalances map[string][]float64
 }
 
+func (c *Connection) pairDataHandler(mt int, msg WSStream, ch <-chan bool, e Embed) {
+	db := e.Collection.MySQLClient
+	var (
+		hchange float64
+		dchange float64
+		hvolume float64
+		dvolume float64
+	)
+	m := make(map[string]float64)
+	for {
+		select {
+		case <-ch:
+			return
+		default:
+			getAllTradesquery := "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES  WHERE TABLE_NAME LIKE 'tradeHistory%'"
+			names, err := db.Query(getAllTradesquery)
+			if err != nil {
+				logg.Error(err)
+			}
+			var name string
+			for names.Next() {
+				err = names.Scan(&name)
+				if err != nil {
+					logg.Error(err)
+				}
+				query := "SELECT * FROM ? WHERE FROM_UNIXTIME(timestamp) >= NOW() - INTERVAL 1 DAY"
+				query2 := "SELECT * FROM ? WHERE FROM_UNIXTIME(timestamp) >= NOW() - INTERVAL 7 DAY"
+				resp, err := db.Query(query, name)
+				if err != nil {
+					logg.Error(err)
+				}
+				var quantity float64
+				sum := float64(0)
+				for resp.Next() {
+					err = resp.Scan(&quantity)
+					sum += quantity
+
+				}
+				m[name] = sum
+
+			}
+		}
+	}
+
+}
+
 // Handling of Trade Data
 func (c *Connection) tradesHandler(mt int, msg WSStream, ch <-chan bool, e Embed) {
 	db := e.Collection.MySQLClient

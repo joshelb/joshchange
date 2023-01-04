@@ -162,6 +162,7 @@ func (e Embed) WSHandler() http.HandlerFunc {
 		quitCandlesticks := make(chan bool)
 		quitTrades := make(chan bool)
 		quitUserData := make(chan bool)
+		quitPairData := make(chan bool)
 		for {
 			mt, msg, err := conn.ReadMessage()
 			logg.Info(msg)
@@ -185,6 +186,9 @@ func (e Embed) WSHandler() http.HandlerFunc {
 				}
 				if dat.Stream == "userData" {
 					go connection.userDataHandler(mt, dat, quitUserData, e)
+				}
+				if dat.Stream == "pairData" {
+					go connection.pairDataHandler(mt, dat, quitPairData, e)
 				}
 			}
 			if dat.Type == "unsubscribe" {

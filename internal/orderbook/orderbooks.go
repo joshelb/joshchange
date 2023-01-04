@@ -115,7 +115,7 @@ func (o Orderbookcollection) Marketorder(obj Order, userid string) {
 		tradequery := "INSERT INTO tradeHistory(uniqueid,userid,side,quantity,price,timestamp) VALUES(?,?,?,?,?,?)"
 		quan, _ := (quantityLeft.Float64())
 		unique_id := xid.New().String()
-		_, err = tx.Exec(tradequery, unique_id, userid, "sell", (obj.Quantity - quan), curPrice.String(), string(time.Now().Unix()))
+		_, err = tx.Exec(tradequery, unique_id, userid, "sell", (obj.Quantity - quan), curPrice.String(), time.Now().Unix())
 		if err != nil {
 			tx.Rollback()
 			logg.Error(err)
@@ -140,7 +140,7 @@ func (o Orderbookcollection) Marketorder(obj Order, userid string) {
 		tradequery := "INSERT INTO tradeHistory(uniqueid,userid,side,quantity,price,timestamp) VALUES(?,?,?,?,?,?)"
 		quan, _ := (quantityLeft.Float64())
 		unique_id := xid.New().String()
-		_, err = tx.Exec(tradequery, unique_id, userid, "buy", (obj.Quantity - quan), curPrice.String(), string(time.Now().Unix()))
+		_, err = tx.Exec(tradequery, unique_id, userid, "buy", (obj.Quantity - quan), curPrice.String(), time.Now().Unix())
 		if err != nil {
 			tx.Rollback()
 			logg.Error(err)
@@ -245,7 +245,7 @@ func (o Orderbookcollection) Limitorder(obj Order, userid string) {
 
 func insertOrders(tx *sql.Tx, db *sql.DB, side string, quantity float64, price float64, userid string, orderid string) {
 	insertquery := "INSERT INTO orders(orderid, userid, side, quantity, price, timestamp) VALUES(?,?,?,?,?,?)"
-	_, err := tx.Exec(insertquery, orderid, userid, side, quantity, price, string(time.Now().Unix()))
+	_, err := tx.Exec(insertquery, orderid, userid, side, quantity, price, time.Now().Unix())
 	if err != nil {
 		tx.Rollback()
 		logg.Error(err)
@@ -361,7 +361,7 @@ func processOrders(tx *sql.Tx, orderid string, db *sql.DB, done []*ob.Order, par
 		}
 		insertOrderHistoryquery := "INSERT INTO orderHistory(orderid, userid, side, quantity, price, timestamp) VALUES(?,?,?,?,?,?)"
 		quant, _ := (value.Quantity()).Float64()
-		_, err = tx.Exec(insertOrderHistoryquery, value.ID(), ID, (value.Side()).String(), quant, (value.Price()).String(), string(time.Now().Unix()))
+		_, err = tx.Exec(insertOrderHistoryquery, value.ID(), ID, (value.Side()).String(), quant, (value.Price()).String(), time.Now().Unix())
 		if err != nil {
 			updateOrderHistoryquery := "UPDATE orderHistory SET quantity = quantity + ? WHERE orderid = ?"
 			_, err = tx.Exec(updateOrderHistoryquery, quant, value.ID())
@@ -404,7 +404,7 @@ func processOrders(tx *sql.Tx, orderid string, db *sql.DB, done []*ob.Order, par
 		}
 		insertOrderHistoryquery := "INSERT INTO orderHistory(orderid, userid, side, quantity, price, timestamp) VALUES(?,?,?,?,?,?)"
 		quant, _ := (partialQuantityProcessed).Float64()
-		_, err = tx.Exec(insertOrderHistoryquery, partial.ID(), ID, (partial.Side()).String(), quant, (partial.Price()).String(), string(time.Now().Unix()))
+		_, err = tx.Exec(insertOrderHistoryquery, partial.ID(), ID, (partial.Side()).String(), quant, (partial.Price()).String(), time.Now().Unix())
 		if err != nil {
 			updateOrderHistoryquery := "UPDATE orderHistory SET quantity = quantity + ? WHERE orderid = ?"
 			_, err = tx.Exec(updateOrderHistoryquery, quant, partial.ID())
