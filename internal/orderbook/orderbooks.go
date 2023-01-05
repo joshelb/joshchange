@@ -112,7 +112,7 @@ func (o Orderbookcollection) Marketorder(obj Order, userid string) {
 			logg.Error(err)
 			return
 		}
-		tradequery := "INSERT INTO tradeHistory(uniqueid,userid,side,quantity,price,timestamp) VALUES(?,?,?,?,?,?)"
+		tradequery := fmt.Sprintf("INSERT INTO tradeHistory%s%s(uniqueid,userid,side,quantity,price,timestamp) VALUES(?,?,?,?,?,?)", symbol1, symbol2)
 		quan, _ := (quantityLeft.Float64())
 		unique_id := xid.New().String()
 		_, err = tx.Exec(tradequery, unique_id, userid, "sell", (obj.Quantity - quan), curPrice.String(), time.Now().Unix())
@@ -137,7 +137,7 @@ func (o Orderbookcollection) Marketorder(obj Order, userid string) {
 			logg.Error(err)
 			return
 		}
-		tradequery := "INSERT INTO tradeHistory(uniqueid,userid,side,quantity,price,timestamp) VALUES(?,?,?,?,?,?)"
+		tradequery := fmt.Sprintf("INSERT INTO tradeHistory%s%s(uniqueid,userid,side,quantity,price,timestamp) VALUES(?,?,?,?,?,?)", symbol1, symbol2)
 		quan, _ := (quantityLeft.Float64())
 		unique_id := xid.New().String()
 		_, err = tx.Exec(tradequery, unique_id, userid, "buy", (obj.Quantity - quan), curPrice.String(), time.Now().Unix())

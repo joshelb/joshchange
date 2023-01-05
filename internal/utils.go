@@ -28,13 +28,8 @@ type UserData struct {
 
 func (c *Connection) pairDataHandler(mt int, msg WSStream, ch <-chan bool, e Embed) {
 	db := e.Collection.MySQLClient
-	var (
-		hchange float64
-		dchange float64
-		hvolume float64
-		dvolume float64
-	)
-	m := make(map[string]float64)
+	var ()
+	m := make(map[string][]float64)
 	for {
 		select {
 		case <-ch:
@@ -51,22 +46,50 @@ func (c *Connection) pairDataHandler(mt int, msg WSStream, ch <-chan bool, e Emb
 				if err != nil {
 					logg.Error(err)
 				}
-				query := "SELECT * FROM ? WHERE FROM_UNIXTIME(timestamp) >= NOW() - INTERVAL 1 DAY"
-				query2 := "SELECT * FROM ? WHERE FROM_UNIXTIME(timestamp) >= NOW() - INTERVAL 7 DAY"
-				resp, err := db.Query(query, name)
+				query := fmt.Sprintf("SELECT * FROM %s WHERE FROM_UNIXTIME(timestamp) >= NOW() - INTERVAL 1 DAY", name)
+				query2 := fmt.Sprintf("SELECT * FROM %s WHERE FROM_UNIXTIME(timestamp) >= NOW() - INTERVAL 7 DAY", name)
+				resp, err := db.Query(query)
+				if err != nil {
+					logg.Error(err)
+				}
+				resp2, err := db.Query(query2)
 				if err != nil {
 					logg.Error(err)
 				}
 				var quantity float64
+				var placeholder string
 				sum := float64(0)
+				sum2 := float64(0)
 				for resp.Next() {
-					err = resp.Scan(&quantity)
+					err = resp.Scan(&placeholder, &placeholder, &placeholder, &quantity, &placeholder, &placeholder)
+					if err != nil {
+						logg.Error(err)
+					}
 					sum += quantity
-
 				}
-				m[name] = sum
-
+				for resp2.Next() {
+					err = resp2.Scan(&placeholder, &placeholder, &placeholder, &quantity, &placeholder, &placeholder)
+					if err != nil {
+						logg.Error(err)
+					}
+					sum2 += quantity
+				}
+				resp.Close()
+				resp2.Close()
+				m[name] = []float64{sum, sum2}
 			}
+			names.Close()
+			data := &Response{Stream: "pairData", Data: m}
+			res, err := json.Marshal(data)
+			if err != nil {
+				logg.Error(err)
+			}
+			err = c.Send(mt, res)
+			if err != nil {
+				logg.Info("broke")
+				return
+			}
+			time.Sleep(500 * time.Millisecond)
 		}
 	}
 
@@ -88,7 +111,8 @@ func (c *Connection) tradesHandler(mt int, msg WSStream, ch <-chan bool, e Embed
 		case <-ch:
 			return
 		default:
-			query := "SELECT * FROM tradeHistory"
+			symbols := strings.Split(msg.Symbol, ":")
+			query := fmt.Sprintf("SELECT * FROM tradeHistory%s", symbols[0]+symbols[1])
 			stmt, err := db.Prepare(query)
 			if err != nil {
 				logg.Error(err)
@@ -174,6 +198,7 @@ func (c *Connection) userDataHandler(mt int, msg WSStream, ch <-chan bool, e Emb
 		price     string
 		timestamp string
 	)
+	symbol := strings.Split(msg.Symbol, ":")
 	for {
 		select {
 		case <-ch:
@@ -181,7 +206,7 @@ func (c *Connection) userDataHandler(mt int, msg WSStream, ch <-chan bool, e Emb
 		default:
 			query := fmt.Sprintf("SELECT * FROM orders WHERE userid='%s'", msg.Email)
 			query2 := fmt.Sprintf("SELECT * FROM orderHistory WHERE userid='%s'", msg.Email)
-			query3 := fmt.Sprintf("SELECT * FROM tradeHistory WHERE userid='%s'", msg.Email)
+			query3 := fmt.Sprintf("SELECT * FROM tradeHistory%s WHERE userid='%s'", symbol[0]+symbol[1], msg.Email)
 			getAllWalletsquery := "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES  WHERE TABLE_NAME LIKE 'wallet%';"
 			names, err := db.Query(getAllWalletsquery)
 			if err != nil {
