@@ -147,12 +147,55 @@ func (c *Connection) tradesHandler(mt int, msg WSStream, ch <-chan bool, e Embed
 }
 
 // Handling of CandlestickData
-func candlesticksHandler(conn *websocket.Conn, mt int, msg WSStream, ch <-chan bool, e Embed) {
+func (c *Connection) candlesticksHandler(conn *websocket.Conn, mt int, msg WSStream, ch <-chan bool, e Embed) {
+	db := e.Collection.MySQLClient
+	var (
+		timestamp string
+		open      string
+		high      string
+		low       string
+		close     string
+		quantity  string
+	)
+	timeframes := []string{"1Min", "5Min", "15Min", "30Min", "1H", "4H", "12H", "1D"}
 	for {
 		select {
 		case <-ch:
 			return
 		default:
+			var result [][][]string
+			for _, i := range timeframes {
+				symbols := strings.Split(msg.Symbol, ":")
+				query := "SELECT * FROM candlestickData" + symbols[0] + symbols[1] + i
+				rows, err := db.Query(query)
+				if err != nil {
+					logg.Error(err)
+				}
+				if rows == nil {
+					break
+				}
+				var res [][]string
+				for rows.Next() {
+					err := rows.Scan(&timestamp, &open, &high, &low, &close, &quantity)
+					if err != nil {
+						logg.Error(err)
+					}
+					row := []string{timestamp, open, high, low, close, quantity}
+					res = append(res, row)
+
+				}
+				result = append(result, res)
+			}
+			data := &Response{Stream: "candlesticks", Data: result}
+			res, err := json.Marshal(data)
+			if err != nil {
+				logg.Error(err)
+			}
+			err = c.Send(mt, res)
+			if err != nil {
+				logg.Info("broke")
+				return
+			}
 			time.Sleep(500 * time.Millisecond)
 		}
 	}

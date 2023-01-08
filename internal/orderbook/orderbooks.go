@@ -112,6 +112,10 @@ func (o Orderbookcollection) Marketorder(obj Order, userid string) {
 			logg.Error(err)
 			return
 		}
+		if done == nil && partial == nil {
+			logg.Error("doesnt work brah")
+			return
+		}
 		tradequery := fmt.Sprintf("INSERT INTO tradeHistory%s%s(uniqueid,userid,side,quantity,price,timestamp) VALUES(?,?,?,?,?,?)", symbol1, symbol2)
 		quan, _ := (quantityLeft.Float64())
 		unique_id := xid.New().String()
@@ -135,6 +139,10 @@ func (o Orderbookcollection) Marketorder(obj Order, userid string) {
 		done, partial, partialQuantityProcessed, quantityLeft, err := orderBook.ProcessMarketOrder(ob.Buy, decimal.NewFromFloat(obj.Quantity))
 		if err != nil {
 			logg.Error(err)
+			return
+		}
+		if done == nil && partial == nil {
+			logg.Error("deosnt work brah")
 			return
 		}
 		tradequery := fmt.Sprintf("INSERT INTO tradeHistory%s%s(uniqueid,userid,side,quantity,price,timestamp) VALUES(?,?,?,?,?,?)", symbol1, symbol2)
