@@ -181,6 +181,9 @@ func (e Embed) WSHandler() http.HandlerFunc {
 				if dat.Stream == "candlesticks" {
 					go connection.candlesticksHandler(conn, mt, dat, quitCandlesticks, e)
 				}
+				if dat.Stream == "candlesticksInit" {
+					go connection.initcandlesticksHandler(conn, mt, dat, e)
+				}
 				if dat.Stream == "trades" {
 					go connection.tradesHandler(mt, dat, quitTrades, e)
 				}

@@ -6,19 +6,18 @@ from datetime import datetime
 
 db_connection_str = 'mysql+pymysql://joshelb:chirurgie@localhost/userInfo'
 db_connection = create_engine(db_connection_str)
+while (True):
+    tick_data = pd.read_sql('SELECT * FROM tradeHistoryKISMJOSH ORDER BY timestamp DESC LIMIT 10', con=db_connection)
+    tick_data["timestamp"] = tick_data["timestamp"].apply(lambda x: datetime.fromtimestamp(int(x)))
+    tick_data.set_index('timestamp', inplace=True, drop=True)
+    print(tick_data)
 
-tick_data = pd.read_sql('SELECT * FROM tradeHistoryKISMJOSH ORDER BY timestamp DESC LIMIT 10', con=db_connection)
-tick_data["timestamp"] = tick_data["timestamp"].apply(lambda x: datetime.fromtimestamp(int(x)))
-tick_data.set_index('timestamp', inplace=True, drop=True)
-print(tick_data)
+    convert_dict = {'price': float,
+                    'quantity': float
+                    }
 
-convert_dict = {'price': float,
-                'quantity': float
-                }
-
-timeframes = ["1Min","5Min","15Min","30Min","1H","4H","12H","1D"]
-candles=[]
-while(True):
+    timeframes = ["1Min","5Min","15Min","30Min","1H","4H","12H","1D"]
+    candles=[]
 
     for i in timeframes:
         tick_data = tick_data.astype(convert_dict)
