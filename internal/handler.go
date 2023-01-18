@@ -129,16 +129,15 @@ func (e Embed) OrderHandler(writer http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		logg.Error(err)
 	}
-	err = isOrderPossible(order, e.Collection.MySQLClient)
-	if err != nil {
-		logg.Error(err)
-		return
-	}
 	fmt.Printf("%+v\n", order.Ordertype)
 	if order.Ordertype == "market" {
 		e.Collection.Marketorder(order, customClaims.UserID)
 	}
 	if order.Ordertype == "limit" {
+		if err != nil {
+			logg.Error(err)
+			return
+		}
 		e.Collection.Limitorder(order, customClaims.UserID)
 	}
 }

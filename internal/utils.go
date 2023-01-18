@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -112,7 +113,7 @@ func (c *Connection) tradesHandler(mt int, msg WSStream, ch <-chan bool, e Embed
 			return
 		default:
 			symbols := strings.Split(msg.Symbol, ":")
-			query := fmt.Sprintf("SELECT * FROM tradeHistory%s", symbols[0]+symbols[1])
+			query := fmt.Sprintf("SELECT * FROM tradeHistory%s LIMIT 100", symbols[0]+"_"+symbols[1])
 			stmt, err := db.Prepare(query)
 			if err != nil {
 				logg.Error(err)
@@ -175,7 +176,39 @@ func (c *Connection) initcandlesticksHandler(conn *websocket.Conn, mt int, msg W
 			res = append(res, row)
 
 		}
-		result = append(result, res)
+		var resres [][]string
+		if len(res) > 0 {
+			filler, _ := strconv.Atoi(res[0][0])
+			logg.Info(len(res))
+			logg.Info("000000")
+			//end, _ := strconv.Atoi(res[len(res)-1][0])
+			end := int(time.Now().Unix())
+			i := 0
+			close := res[0][4]
+			for filler < end {
+				if i == len(res) {
+					row := []string{fmt.Sprintf("%d", filler), close, close, close, close, "0"}
+					resres = append(resres, row)
+					filler = filler + 60
+					continue
+				}
+				plh, _ := strconv.Atoi(res[i][0])
+				if plh != filler {
+					row := []string{fmt.Sprintf("%d", filler), close, close, close, close, "0"}
+					//row := resres[len(resres)-1]
+					resres = append(resres, row)
+				}
+				if filler == plh {
+					resres = append(resres, res[i])
+					close = res[i][4]
+					i += 1
+				}
+				filler = filler + 60
+
+			}
+
+		}
+		result = append(result, resres)
 	}
 	data := &Response{Stream: "candlesticksInit", Data: result}
 	res, err := json.Marshal(data)
@@ -194,7 +227,7 @@ func (c *Connection) initcandlesticksHandler(conn *websocket.Conn, mt int, msg W
 func (c *Connection) candlesticksHandler(conn *websocket.Conn, mt int, msg WSStream, ch <-chan bool, e Embed) {
 	db := e.Collection.MySQLClient
 	var (
-		timestamp string
+		timestamp int
 		open      string
 		high      string
 		low       string
@@ -210,7 +243,7 @@ func (c *Connection) candlesticksHandler(conn *websocket.Conn, mt int, msg WSStr
 			var result [][][]string
 			for _, i := range timeframes {
 				symbols := strings.Split(msg.Symbol, ":")
-				query := "SELECT * FROM candlestickData" + symbols[0] + symbols[1] + i + " ORDER BY `index` DESC LIMIT 10"
+				query := "SELECT * FROM candlestickData" + symbols[0] + symbols[1] + i + " ORDER BY timestamp DESC LIMIT 2"
 				rows, err := db.Query(query)
 				if err != nil {
 					logg.Error(err)
@@ -224,9 +257,15 @@ func (c *Connection) candlesticksHandler(conn *websocket.Conn, mt int, msg WSStr
 					if err != nil {
 						logg.Error(err)
 					}
-					row := []string{timestamp, open, high, low, close, quantity}
-					res = append(res, row)
-
+					time_now := time.Now().Unix()
+					ts_curr_min := time_now - (time_now % 60)
+					if ts_curr_min > int64(timestamp) {
+						row := []string{fmt.Sprintf("%d", ts_curr_min), close, close, close, close, "0"}
+						res = append(res, row)
+					} else {
+						row := []string{fmt.Sprintf("%d", ts_curr_min), open, high, low, close, quantity}
+						res = append(res, row)
+					}
 				}
 				result = append(result, res)
 			}
@@ -293,7 +332,7 @@ func (c *Connection) userDataHandler(mt int, msg WSStream, ch <-chan bool, e Emb
 		default:
 			query := fmt.Sprintf("SELECT * FROM orders WHERE userid='%s'", msg.Email)
 			query2 := fmt.Sprintf("SELECT * FROM orderHistory WHERE userid='%s'", msg.Email)
-			query3 := fmt.Sprintf("SELECT * FROM tradeHistory%s WHERE userid='%s'", symbol[0]+symbol[1], msg.Email)
+			query3 := fmt.Sprintf("SELECT * FROM tradeHistory%s WHERE userid='%s'", symbol[0]+"_"+symbol[1], msg.Email)
 			getAllWalletsquery := "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES  WHERE TABLE_NAME LIKE 'wallet%';"
 			names, err := db.Query(getAllWalletsquery)
 			if err != nil {

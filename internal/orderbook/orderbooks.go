@@ -31,7 +31,10 @@ type CancelOrder struct {
 type Orderbookcollection struct {
 	Map         sync.Map
 	MySQLClient *sql.DB
+	mu          *sync.Mutex
 }
+
+var mx sync.Mutex
 
 func (o *Orderbookcollection) InitOrderbook(symbol string) {
 	o.Map.Store(symbol, ob.NewOrderBook())
@@ -107,16 +110,26 @@ func (o Orderbookcollection) Marketorder(obj Order, userid string) {
 		if err != nil {
 			logg.Error(err)
 		}
+		curpice, _ := curPrice.Float64()
+		o.ticktoCandlestick(obj, curpice)
+		mx.Lock()
+		err = validateOrder(db, obj.Quantity, symbol1)
+		if err != nil {
+			tx.Rollback()
+			mx.Unlock()
+			return
+		}
 		done, partial, partialQuantityProcessed, quantityLeft, err := orderBook.ProcessMarketOrder(ob.Sell, decimal.NewFromFloat(obj.Quantity))
 		if err != nil {
 			logg.Error(err)
 			return
 		}
+		mx.Unlock()
 		if done == nil && partial == nil {
 			logg.Error("doesnt work brah")
 			return
 		}
-		tradequery := fmt.Sprintf("INSERT INTO tradeHistory%s%s(uniqueid,userid,side,quantity,price,timestamp) VALUES(?,?,?,?,?,?)", symbol1, symbol2)
+		tradequery := fmt.Sprintf("INSERT INTO tradeHistory%s_%s(uniqueid,userid,side,quantity,price,timestamp) VALUES(?,?,?,?,?,?)", symbol1, symbol2)
 		quan, _ := (quantityLeft.Float64())
 		unique_id := xid.New().String()
 		_, err = tx.Exec(tradequery, unique_id, userid, "sell", (obj.Quantity - quan), curPrice.String(), time.Now().Unix())
@@ -136,16 +149,32 @@ func (o Orderbookcollection) Marketorder(obj Order, userid string) {
 		if err != nil {
 			logg.Error(err)
 		}
+		curpice, _ := curPrice.Float64()
+		o.ticktoCandlestick(obj, curpice)
+		mx.Lock()
+		price, _, err := orderBook.CalculateMarketPrice(ob.Buy, decimal.NewFromFloat(obj.Quantity))
+		if err != nil {
+			logg.Error(err)
+		}
+		pricee, _ := price.Float64()
+		logg.Info(price)
+		err = validateOrder(db, pricee, symbol2)
+		if err != nil {
+			tx.Rollback()
+			mx.Unlock()
+			return
+		}
 		done, partial, partialQuantityProcessed, quantityLeft, err := orderBook.ProcessMarketOrder(ob.Buy, decimal.NewFromFloat(obj.Quantity))
 		if err != nil {
 			logg.Error(err)
 			return
 		}
+		mx.Unlock()
 		if done == nil && partial == nil {
 			logg.Error("deosnt work brah")
 			return
 		}
-		tradequery := fmt.Sprintf("INSERT INTO tradeHistory%s%s(uniqueid,userid,side,quantity,price,timestamp) VALUES(?,?,?,?,?,?)", symbol1, symbol2)
+		tradequery := fmt.Sprintf("INSERT INTO tradeHistory%s_%s(uniqueid,userid,side,quantity,price,timestamp) VALUES(?,?,?,?,?,?)", symbol1, symbol2)
 		quan, _ := (quantityLeft.Float64())
 		unique_id := xid.New().String()
 		_, err = tx.Exec(tradequery, unique_id, userid, "buy", (obj.Quantity - quan), curPrice.String(), time.Now().Unix())
@@ -180,10 +209,19 @@ func (o Orderbookcollection) Limitorder(obj Order, userid string) {
 			logg.Error(err)
 		}
 		ID := xid.New().String()
+		mx.Lock()
+		err = validateOrder(db, obj.Quantity, symbol1)
+		if err != nil {
+			tx.Rollback()
+			mx.Unlock()
+			return
+		}
 		done, partial, partialQuantityProcessed, err := orderBook.ProcessLimitOrder(ob.Sell, ID, decimal.NewFromFloat(obj.Quantity), decimal.NewFromFloat(obj.Price))
 		if err != nil {
 			logg.Error(err)
 		}
+
+		mx.Unlock()
 		if done == nil && partial == nil {
 			insertOrders(tx, db, "sell", obj.Quantity, obj.Price, userid, ID)
 			err = tx.Commit()
@@ -192,7 +230,6 @@ func (o Orderbookcollection) Limitorder(obj Order, userid string) {
 			}
 			return
 		}
-		logg.Info("hi")
 		processOrders(tx, ID, db, done, partial, userid, partialQuantityProcessed, symbol1, symbol2)
 		restOrder := orderBook.Order(ID)
 		if restOrder != nil {
@@ -217,10 +254,23 @@ func (o Orderbookcollection) Limitorder(obj Order, userid string) {
 			logg.Error(err)
 		}
 		ID := xid.New().String()
+		mx.Lock()
+		price, _, err := orderBook.CalculateMarketPrice(ob.Buy, decimal.NewFromFloat(obj.Quantity))
+		pricee, _ := price.Float64()
+		if err != nil {
+			pricee = obj.Quantity * obj.Price
+		}
+		err = validateOrder(db, pricee, symbol2)
+		if err != nil {
+			tx.Rollback()
+			mx.Unlock()
+			return
+		}
 		done, partial, partialQuantityProcessed, err := orderBook.ProcessLimitOrder(ob.Buy, ID, decimal.NewFromFloat(obj.Quantity), decimal.NewFromFloat(obj.Price))
 		if err != nil {
 			logg.Error(err)
 		}
+		mx.Unlock()
 		if done == nil && partial == nil {
 			insertOrders(tx, db, "buy", obj.Quantity, obj.Price, userid, ID)
 			err = tx.Commit()
@@ -274,8 +324,6 @@ func updateAvailableBalance(tx *sql.Tx, userid string, quantity float64, wallet 
 
 // User1 is the maker
 func processWalletTransaction(tx *sql.Tx, side string, db *sql.DB, user1 string, user2 string, price float64, quantity float64, wallet1 string, wallet2 string) {
-	logg.Info(quantity)
-	logg.Info(price)
 	query := fmt.Sprintf("Update %s SET Balance = Balance + ?, AvailableBalance = AvailableBalance + ?  WHERE userid = ?", wallet1)
 	query2 := fmt.Sprintf("Update %s SET Balance = Balance + ?, AvailableBalance = AvailableBalance + ? WHERE userid = ?", wallet2)
 	query3 := fmt.Sprintf("Update %s SET Balance = Balance - ?, AvailableBalance = AvailableBalance - ? WHERE userid = ?", wallet1)
@@ -340,7 +388,6 @@ func processOrders(tx *sql.Tx, orderid string, db *sql.DB, done []*ob.Order, par
 		if orderid == value.ID() {
 			return
 		}
-		logg.Info(value)
 		user_id, err := db.Prepare("SELECT userid from orders WHERE orderid = ?")
 		if err != nil {
 			logg.Error(err)
@@ -423,4 +470,59 @@ func processOrders(tx *sql.Tx, orderid string, db *sql.DB, done []*ob.Order, par
 			}
 		}
 	}
+}
+
+func (o Orderbookcollection) ticktoCandlestick(order Order, curprice float64) {
+	db := o.MySQLClient
+	timeframe := 1
+	time_now := time.Now().Unix()
+	var (
+		timestamp int64
+		open      float64
+		high      float64
+		low       float64
+		close     float64
+		quantity  float64
+	)
+	symbols := strings.Split(order.Symbol, ":")
+	query := "SELECT * FROM candlestickData" + symbols[0] + symbols[1] + fmt.Sprintf("%dMin", timeframe) + " ORDER BY timestamp DESC LIMIT 1"
+	errNoRow := db.QueryRow(query).Scan(&timestamp, &open, &high, &low, &close, &quantity)
+	if errNoRow != nil {
+		logg.Error(errNoRow)
+	}
+
+	if errNoRow != nil {
+		logg.Info("heyo")
+		query := fmt.Sprintf("INSERT INTO candlestickData%s%s%s (timestamp, open, high, low, close, quantity) VALUES(?,?,?,?,?,?)", symbols[0], symbols[1], fmt.Sprintf("%dMin", timeframe))
+		ts_curr_min := time_now - (time_now % 60)
+		_, err := db.Exec(query, ts_curr_min, curprice, curprice, curprice, curprice, order.Quantity)
+		if err != nil {
+			logg.Error(err)
+		}
+		return
+	}
+
+	if timestamp <= time_now && time_now <= timestamp+int64(timeframe*60) {
+		low_new := low
+		high_new := high
+		if curprice > high {
+			high_new = curprice
+		}
+		if curprice < low {
+			low_new = curprice
+		}
+		query := fmt.Sprintf("UPDATE candlestickData%s%s%s SET quantity = quantity + ?,low = ? ,high = ?,close = ? WHERE timestamp = ?", symbols[0], symbols[1], fmt.Sprintf("%dMin", timeframe))
+		_, err := db.Exec(query, order.Quantity, low_new, high_new, curprice, timestamp)
+		if err != nil {
+			logg.Error(err)
+		}
+	} else if timestamp < time_now {
+		query := fmt.Sprintf("INSERT INTO candlestickData%s%s%s (timestamp, open, high, low, close, quantity) VALUES(?,?,?,?,?,?)", symbols[0], symbols[1], fmt.Sprintf("%dMin", timeframe))
+		ts_curr_min := time_now - (time_now % 60)
+		_, err := db.Exec(query, ts_curr_min, curprice, curprice, curprice, curprice, order.Quantity)
+		if err != nil {
+			logg.Error(err)
+		}
+	}
+
 }

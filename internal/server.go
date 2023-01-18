@@ -26,7 +26,6 @@ func New() {
 		panic(err.Error())
 	}
 	defer db.Close()
-
 	collection := &oj.Orderbookcollection{MySQLClient: db}
 	collection.InitOrderbook("KISM:JOSH")
 	// var of Embed struct to pass Orderbookcollection to Handler
