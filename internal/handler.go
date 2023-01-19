@@ -130,6 +130,9 @@ func (e Embed) OrderHandler(writer http.ResponseWriter, r *http.Request) {
 		logg.Error(err)
 	}
 	fmt.Printf("%+v\n", order.Ordertype)
+	if !isTradingActive(e.Collection.MySQLClient, order.Symbol) {
+		return
+	}
 	if order.Ordertype == "market" {
 		e.Collection.Marketorder(order, customClaims.UserID)
 	}
@@ -162,6 +165,7 @@ func (e Embed) WSHandler() http.HandlerFunc {
 		quitTrades := make(chan bool)
 		quitUserData := make(chan bool)
 		quitPairData := make(chan bool)
+		quitWalletData := make(chan bool)
 		for {
 			mt, msg, err := conn.ReadMessage()
 			logg.Info(msg)
@@ -188,6 +192,9 @@ func (e Embed) WSHandler() http.HandlerFunc {
 				}
 				if dat.Stream == "userData" {
 					go connection.userDataHandler(mt, dat, quitUserData, e)
+				}
+				if dat.Stream == "walletData" {
+					go connection.walletHandler(mt, dat, quitWalletData, e)
 				}
 				if dat.Stream == "pairData" {
 					go connection.pairDataHandler(mt, dat, quitPairData, e)

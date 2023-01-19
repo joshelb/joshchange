@@ -27,6 +27,10 @@ type UserData struct {
 	WalletBalances map[string][]float64
 }
 
+type WalletData struct {
+	WalletBalances map[string][]float64
+}
+
 func (c *Connection) pairDataHandler(mt int, msg WSStream, ch <-chan bool, e Embed) {
 	db := e.Collection.MySQLClient
 	var ()
@@ -114,13 +118,11 @@ func (c *Connection) tradesHandler(mt int, msg WSStream, ch <-chan bool, e Embed
 		default:
 			symbols := strings.Split(msg.Symbol, ":")
 			query := fmt.Sprintf("SELECT * FROM tradeHistory%s LIMIT 100", symbols[0]+"_"+symbols[1])
-			stmt, err := db.Prepare(query)
+			resp, err := db.Query(query)
 			if err != nil {
 				logg.Error(err)
-			}
-			resp, err := stmt.Query()
-			if err != nil {
-				logg.Error(err)
+				logg.Info(resp)
+				return
 			}
 			result := [][]string{}
 			for resp.Next() {
@@ -130,7 +132,6 @@ func (c *Connection) tradesHandler(mt int, msg WSStream, ch <-chan bool, e Embed
 				}
 				result = append(result, []string{uniqueid, side, quantity, price, timestamp})
 			}
-			stmt.Close()
 			resp.Close()
 			data := &Response{Stream: "trades", Data: result}
 			res, err := json.Marshal(data)
@@ -165,6 +166,7 @@ func (c *Connection) initcandlesticksHandler(conn *websocket.Conn, mt int, msg W
 		rows, err := db.Query(query)
 		if err != nil {
 			logg.Error(err)
+			return
 		}
 		var res [][]string
 		for rows.Next() {
@@ -247,6 +249,7 @@ func (c *Connection) candlesticksHandler(conn *websocket.Conn, mt int, msg WSStr
 				rows, err := db.Query(query)
 				if err != nil {
 					logg.Error(err)
+					return
 				}
 				if rows == nil {
 					break
@@ -294,6 +297,7 @@ func (c *Connection) orderbookHandler(mt int, msg WSStream, ch <-chan bool, e Em
 			orderBook, err := e.Collection.GetOrderbook_bySymbol(msg.Symbol)
 			if err != nil {
 				logg.Error(err)
+				return
 			}
 			data := &Response{Stream: "orderbook", Data: orderBook}
 			res, err := json.Marshal(data)
@@ -308,6 +312,58 @@ func (c *Connection) orderbookHandler(mt int, msg WSStream, ch <-chan bool, e Em
 			time.Sleep(100 * time.Millisecond)
 		}
 	}
+}
+
+func (c *Connection) walletHandler(mt int, msg WSStream, ch <-chan bool, e Embed) {
+	db := e.Collection.MySQLClient
+	for {
+		select {
+		case <-ch:
+			return
+		default:
+			getAllWalletsquery := "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES  WHERE TABLE_NAME LIKE 'wallet%';"
+			names, err := db.Query(getAllWalletsquery)
+			if err != nil {
+				logg.Error(err)
+			}
+			var name string
+			var AvailableBalance float64
+			var Balance float64
+			m := make(map[string][]float64)
+			for names.Next() {
+				err = names.Scan(&name)
+				if err != nil {
+					logg.Error(err)
+				}
+				query := fmt.Sprintf("SELECT AvailableBalance,Balance FROM %s WHERE userid = ?", name)
+				rows, err := db.Query(query, msg.Email)
+				if err != nil {
+					logg.Error(err)
+				}
+				for rows.Next() {
+					err := rows.Scan(&AvailableBalance, &Balance)
+					if err != nil {
+						logg.Error(err)
+					}
+					m[(name[6:])] = []float64{AvailableBalance, Balance}
+				}
+				rows.Close()
+			}
+			walletData := &WalletData{WalletBalances: m}
+			data := &Response{Stream: "walletData", Data: walletData}
+			res, err := json.Marshal(data)
+			if err != nil {
+				logg.Error(err)
+			}
+			err = c.Send(mt, res)
+			if err != nil {
+				logg.Info("broke")
+				return
+			}
+			time.Sleep(1000 * time.Millisecond)
+		}
+	}
+
 }
 
 func (c *Connection) userDataHandler(mt int, msg WSStream, ch <-chan bool, e Embed) {
@@ -325,6 +381,10 @@ func (c *Connection) userDataHandler(mt int, msg WSStream, ch <-chan bool, e Emb
 		timestamp string
 	)
 	symbol := strings.Split(msg.Symbol, ":")
+	if len(symbol) < 2 {
+		symbol[0] = ""
+		symbol = append(symbol, "")
+	}
 	for {
 		select {
 		case <-ch:
@@ -361,29 +421,20 @@ func (c *Connection) userDataHandler(mt int, msg WSStream, ch <-chan bool, e Emb
 				}
 				rows.Close()
 			}
-			stmt, err := db.Prepare(query)
+			rows, err := db.Query(query)
 			if err != nil {
 				logg.Error(err)
+				return
 			}
-			stmt2, err := db.Prepare(query2)
+			rows2, err := db.Query(query2)
 			if err != nil {
 				logg.Error(err)
+				return
 			}
-			stmt3, err := db.Prepare(query3)
+			rows3, err := db.Query(query3)
 			if err != nil {
 				logg.Error(err)
-			}
-			rows, err := stmt.Query()
-			if err != nil {
-				logg.Error(err)
-			}
-			rows2, err := stmt2.Query()
-			if err != nil {
-				logg.Error(err)
-			}
-			rows3, err := stmt3.Query()
-			if err != nil {
-				logg.Error(err)
+				return
 			}
 			result = [][]string{}
 			for rows.Next() {
@@ -426,9 +477,6 @@ func (c *Connection) userDataHandler(mt int, msg WSStream, ch <-chan bool, e Emb
 				logg.Info("broke")
 				return
 			}
-			stmt.Close()
-			stmt2.Close()
-			stmt3.Close()
 			time.Sleep(1000 * time.Millisecond)
 		}
 	}
@@ -487,4 +535,17 @@ func isOrderPossible(obj orderbook.Order, db *sql.DB) error {
 	tx.Commit()
 	return nil
 
+}
+
+func isTradingActive(conn *sql.DB, pair string) bool {
+	var boolvar int
+	var placeholder string
+	err := conn.QueryRow("SELECT * FROM tradingActive WHERE pair = ?", pair).Scan(&placeholder, &boolvar)
+	if err != nil {
+		logg.Error(err)
+	}
+	if boolvar == 1 {
+		return true
+	}
+	return false
 }

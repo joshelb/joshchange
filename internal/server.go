@@ -3,8 +3,12 @@ package server
 import (
 	"context"
 	"errors"
+	"log"
 	"net/http"
 	"net/url"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"database/sql"
@@ -28,6 +32,7 @@ func New() {
 	defer db.Close()
 	collection := &oj.Orderbookcollection{MySQLClient: db}
 	collection.InitOrderbook("KISM:JOSH")
+	go collection.BackupBook(db, "KISM:JOSH")
 	// var of Embed struct to pass Orderbookcollection to Handler
 	embed := &Embed{
 		Collection: collection,
@@ -52,10 +57,31 @@ func New() {
 	router.Handle("/registerDBEntry", registerhandler_update)
 	router.HandleFunc("/silvester", SilvesterHandler)
 
-	err = http.ListenAndServe(":8080", router)
-	if err != nil {
-		logg.Error("There is an error with the Server.")
+	done := make(chan os.Signal, 1)
+	signal.Notify(done, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
+
+	srv := &http.Server{
+		Addr:    ":8080",
+		Handler: router,
 	}
+
+	go func() {
+		err = srv.ListenAndServe()
+		if err != nil {
+			logg.Error(err)
+		}
+	}()
+
+	<-done
+	logg.Info("stopped")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer func() {
+		cancel()
+	}()
+	if err := srv.Shutdown(ctx); err != nil {
+		logg.Error("Server Shutdown Failed:%+v", err)
+	}
+	log.Print("Server Exited Properly")
 
 }
 

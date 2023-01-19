@@ -4,8 +4,11 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
+	"time"
 
 	ob "github.com/joshelb/orderbook"
+	"github.com/shopspring/decimal"
 	logg "github.com/sirupsen/logrus"
 )
 
@@ -19,9 +22,9 @@ func (o Orderbookcollection) GetOrderbook_bySymbol(symbol string) (*ob.OrderBook
 	}
 }
 
-func validateOrder(conn *sql.DB, quantity float64, symbol string) error {
-	query := fmt.Sprintf("UPDATE %s  SET AvailableBalance = CASE     WHEN AvailableBalance < ? THEN AvailableBalance     ELSE AvailableBalance - ?     END", ("wallet" + symbol))
-	results, err := conn.Exec(query, quantity, quantity)
+func validateOrder(conn *sql.DB, quantity float64, symbol string, userid string) error {
+	query := fmt.Sprintf("UPDATE %s  SET AvailableBalance = CASE     WHEN AvailableBalance < ? THEN AvailableBalance     ELSE AvailableBalance - ?     END WHERE userid = ?", ("wallet" + symbol))
+	results, err := conn.Exec(query, decimal.NewFromFloat(quantity), decimal.NewFromFloat(quantity), userid)
 	if err != nil {
 		logg.Error(err)
 	}
@@ -33,4 +36,25 @@ func validateOrder(conn *sql.DB, quantity float64, symbol string) error {
 		return errors.New("order not possible")
 	}
 	return nil
+}
+
+func (o Orderbookcollection) BackupBook(conn *sql.DB, pair string) {
+	for {
+		value, ok := o.Map.Load(pair)
+		if !ok {
+			logg.Error("error")
+		}
+		symbols := strings.Split(pair, ":")
+		data, err := (value.(*ob.OrderBook)).MarshalJSON()
+		if err != nil {
+			logg.Error(err)
+		}
+		timestamp := time.Now().Unix()
+		query := fmt.Sprintf("INSERT INTO orderbook%s VALUES(?,?)", symbols[0]+"_"+symbols[1])
+		_, err = conn.Exec(query, data, timestamp)
+		if err != nil {
+			logg.Error(err)
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
 }

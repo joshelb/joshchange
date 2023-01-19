@@ -37,9 +37,23 @@ type Orderbookcollection struct {
 var mx sync.Mutex
 
 func (o *Orderbookcollection) InitOrderbook(symbol string) {
-	o.Map.Store(symbol, ob.NewOrderBook())
-	o.Map.Store("hhh", "rage")
-	logg.Info(o.Map.Load("btcusd"))
+	obook := ob.NewOrderBook()
+	var timestamp int
+	var obj []byte
+	err := o.MySQLClient.QueryRow("SELECT * FROM orderbookKISM_JOSH ORDER BY timestamp DESC LIMIT 1").Scan(&obj, &timestamp)
+	if err != nil {
+		logg.Error(err)
+		o.Map.Store(symbol, ob.NewOrderBook())
+		return
+	}
+	data := obj
+	err = obook.UnmarshalJSON(data)
+	if err != nil {
+		logg.Error(err)
+	}
+	logg.Info(obook)
+
+	o.Map.Store(symbol, obook)
 	logg.Info("Initialized Orderbook for Symbol %s", symbol)
 }
 
@@ -56,7 +70,9 @@ func (o Orderbookcollection) Cancelorder(obj CancelOrder, userid string) error {
 	if err != nil {
 		logg.Error(err)
 	}
+	mx.Lock()
 	order := orderBook.CancelOrder(obj.OrderID)
+	mx.Unlock()
 	if order == nil {
 		return errors.New("Order doesnt exist anymore")
 	}
@@ -113,7 +129,7 @@ func (o Orderbookcollection) Marketorder(obj Order, userid string) {
 		curpice, _ := curPrice.Float64()
 		o.ticktoCandlestick(obj, curpice)
 		mx.Lock()
-		err = validateOrder(db, obj.Quantity, symbol1)
+		err = validateOrder(db, obj.Quantity, symbol1, userid)
 		if err != nil {
 			tx.Rollback()
 			mx.Unlock()
@@ -158,7 +174,7 @@ func (o Orderbookcollection) Marketorder(obj Order, userid string) {
 		}
 		pricee, _ := price.Float64()
 		logg.Info(price)
-		err = validateOrder(db, pricee, symbol2)
+		err = validateOrder(db, pricee, symbol2, userid)
 		if err != nil {
 			tx.Rollback()
 			mx.Unlock()
@@ -210,8 +226,9 @@ func (o Orderbookcollection) Limitorder(obj Order, userid string) {
 		}
 		ID := xid.New().String()
 		mx.Lock()
-		err = validateOrder(db, obj.Quantity, symbol1)
+		err = validateOrder(db, obj.Quantity, symbol1, userid)
 		if err != nil {
+			logg.Error(err)
 			tx.Rollback()
 			mx.Unlock()
 			return
@@ -258,10 +275,13 @@ func (o Orderbookcollection) Limitorder(obj Order, userid string) {
 		price, _, err := orderBook.CalculateMarketPrice(ob.Buy, decimal.NewFromFloat(obj.Quantity))
 		pricee, _ := price.Float64()
 		if err != nil {
+			logg.Error(err)
 			pricee = obj.Quantity * obj.Price
 		}
-		err = validateOrder(db, pricee, symbol2)
+		logg.Info(pricee)
+		err = validateOrder(db, pricee, symbol2, userid)
 		if err != nil {
+			logg.Info(err)
 			tx.Rollback()
 			mx.Unlock()
 			return
@@ -386,7 +406,8 @@ func processOrders(tx *sql.Tx, orderid string, db *sql.DB, done []*ob.Order, par
 	var ID string
 	for _, value := range done {
 		if orderid == value.ID() {
-			return
+			logg.Info("gi")
+			continue
 		}
 		user_id, err := db.Prepare("SELECT userid from orders WHERE orderid = ?")
 		if err != nil {
@@ -447,7 +468,8 @@ func processOrders(tx *sql.Tx, orderid string, db *sql.DB, done []*ob.Order, par
 			}
 		}
 		row.Close()
-		quan, _ := (partial.Quantity()).Float64()
+		quan, _ := (partialQuantityProcessed).Float64()
+		logg.Info(partial)
 		price, _ := (partial.Price()).Float64()
 		processWalletTransaction(tx, (partial.Side()).String(), db, ID, userid, price, quan, "wallet"+symbol1, "wallet"+symbol2)
 		updateOrdersquery := "UPDATE orders SET quantity = ? WHERE orderid = ?"
