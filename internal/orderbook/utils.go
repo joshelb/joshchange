@@ -22,9 +22,9 @@ func (o Orderbookcollection) GetOrderbook_bySymbol(symbol string) (*ob.OrderBook
 	}
 }
 
-func validateOrder(conn *sql.DB, quantity float64, symbol string, userid string) error {
+func validateOrder(conn *sql.DB, quantity decimal.Decimal, symbol string, userid string) error {
 	query := fmt.Sprintf("UPDATE %s  SET AvailableBalance = CASE     WHEN AvailableBalance < ? THEN AvailableBalance     ELSE AvailableBalance - ?     END WHERE userid = ?", ("wallet" + symbol))
-	results, err := conn.Exec(query, decimal.NewFromFloat(quantity), decimal.NewFromFloat(quantity), userid)
+	results, err := conn.Exec(query, quantity, quantity, userid)
 	if err != nil {
 		logg.Error(err)
 	}
