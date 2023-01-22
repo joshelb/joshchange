@@ -130,6 +130,13 @@ func (e Embed) OrderHandler(writer http.ResponseWriter, r *http.Request) {
 		logg.Error(err)
 	}
 	fmt.Printf("%+v\n", order.Ordertype)
+	err = validate_input(order)
+	logg.Error(err)
+	if err != nil {
+		logg.Error(err)
+		writer.Write([]byte(err.Error()))
+		return
+	}
 	if !isTradingActive(e.Collection.MySQLClient, order.Symbol) {
 		return
 	}

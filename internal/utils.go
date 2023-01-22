@@ -11,6 +11,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/joshelb/joshchange/internal/orderbook"
+	"github.com/shopspring/decimal"
 	logg "github.com/sirupsen/logrus"
 )
 
@@ -548,4 +549,33 @@ func isTradingActive(conn *sql.DB, pair string) bool {
 		return true
 	}
 	return false
+}
+
+func validate_input(obj orderbook.Order) error {
+	if obj.Symbol == "KISM:JOSH" {
+		logg.Info(obj.Quantity)
+		s := decimal.NewFromFloat(obj.Quantity).String()
+		x := strings.Split(s, ".")
+		logg.Info(x)
+		var m int
+		if len(x) == 1 {
+			m = 1
+		} else {
+			m = len(x[1])
+		}
+		if obj.Quantity >= 1 && m < 6 {
+			s := decimal.NewFromFloat(obj.Price).String()
+			x := strings.Split(s, ".")
+			var m int
+			if len(x) == 1 {
+				m = 1
+			} else {
+				m = len(x[1])
+			}
+			if obj.Price >= 0.0000001 && m < 6 {
+				return nil
+			}
+		}
+	}
+	return errors.New("invalid Order Input for this pair")
 }

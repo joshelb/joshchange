@@ -125,8 +125,6 @@ func (o Orderbookcollection) Marketorder(obj Order, userid string) {
 		if err != nil {
 			logg.Error(err)
 		}
-		//curpice, _ := curPrice.Float64()
-		o.ticktoCandlestick(obj, curPrice)
 		mx.Lock()
 		err = validateOrder(db, decimal.NewFromFloat(obj.Quantity), symbol1, userid)
 		if err != nil {
@@ -134,25 +132,33 @@ func (o Orderbookcollection) Marketorder(obj Order, userid string) {
 			mx.Unlock()
 			return
 		}
-		done, partial, partialQuantityProcessed, _, err := orderBook.ProcessMarketOrder(ob.Sell, decimal.NewFromFloat(obj.Quantity))
+		done, partial, partialQuantityProcessed, quantityLeft, err := orderBook.ProcessMarketOrder(ob.Sell, decimal.NewFromFloat(obj.Quantity))
 		if err != nil {
 			logg.Error(err)
 			return
 		}
 		mx.Unlock()
+		logg.Info(partial)
+		logg.Info(done)
 		if done == nil && partial == nil {
 			logg.Error("doesnt work brah")
+			query := fmt.Sprintf("UPDATE %s  SET AvailableBalance = AvailableBalance + ? WHERE userid = ?", ("wallet" + symbol1))
+			_, err := db.Exec(query, quantityLeft, userid)
+			if err != nil {
+				logg.Error(err)
+			}
 			return
 		}
+		o.ticktoCandlestick(obj, curPrice)
 		tradequery := fmt.Sprintf("INSERT INTO tradeHistory%s_%s(uniqueid,userid,side,quantity,price,timestamp) VALUES(?,?,?,?,?,?)", symbol1, symbol2)
 		unique_id := xid.New().String()
-		_, err = tx.Exec(tradequery, unique_id, userid, "sell", partialQuantityProcessed, curPrice.String(), time.Now().Unix())
+		_, err = tx.Exec(tradequery, unique_id, userid, "sell", decimal.NewFromFloat(obj.Quantity).Sub(quantityLeft), curPrice.String(), time.Now().Unix())
 		if err != nil {
 			tx.Rollback()
 			logg.Error(err)
 			return
 		}
-		processOrders(tx, "x", db, done, partial, userid, partialQuantityProcessed, symbol1, symbol2)
+		processOrders(tx, "x", db, done, partial, quantityLeft, userid, partialQuantityProcessed, symbol1, symbol2)
 		err = tx.Commit()
 		if err != nil {
 			logg.Error(err)
@@ -163,22 +169,18 @@ func (o Orderbookcollection) Marketorder(obj Order, userid string) {
 		if err != nil {
 			logg.Error(err)
 		}
-		//curpice, _ := curPrice.Float64()
-		o.ticktoCandlestick(obj, curPrice)
 		mx.Lock()
 		price, _, err := orderBook.CalculateMarketPrice(ob.Buy, decimal.NewFromFloat(obj.Quantity))
 		if err != nil {
 			logg.Error(err)
 		}
-		//pricee, _ := price.Float64()
-		logg.Info(price)
 		err = validateOrder(db, price, symbol2, userid)
 		if err != nil {
 			tx.Rollback()
 			mx.Unlock()
 			return
 		}
-		done, partial, partialQuantityProcessed, _, err := orderBook.ProcessMarketOrder(ob.Buy, decimal.NewFromFloat(obj.Quantity))
+		done, partial, partialQuantityProcessed, quantityLeft, err := orderBook.ProcessMarketOrder(ob.Buy, decimal.NewFromFloat(obj.Quantity))
 		if err != nil {
 			logg.Error(err)
 			return
@@ -188,15 +190,16 @@ func (o Orderbookcollection) Marketorder(obj Order, userid string) {
 			logg.Error("deosnt work brah")
 			return
 		}
+		o.ticktoCandlestick(obj, curPrice)
 		tradequery := fmt.Sprintf("INSERT INTO tradeHistory%s_%s(uniqueid,userid,side,quantity,price,timestamp) VALUES(?,?,?,?,?,?)", symbol1, symbol2)
 		unique_id := xid.New().String()
-		_, err = tx.Exec(tradequery, unique_id, userid, "buy", partialQuantityProcessed, curPrice.String(), time.Now().Unix())
+		_, err = tx.Exec(tradequery, unique_id, userid, "buy", decimal.NewFromFloat(obj.Quantity).Sub(quantityLeft), curPrice.String(), time.Now().Unix())
 		if err != nil {
 			tx.Rollback()
 			logg.Error(err)
 			return
 		}
-		processOrders(tx, "x", db, done, partial, userid, partialQuantityProcessed, symbol1, symbol2)
+		processOrders(tx, "x", db, done, partial, decimal.NewFromFloat(0), userid, partialQuantityProcessed, symbol1, symbol2)
 		err = tx.Commit()
 		if err != nil {
 			logg.Error(err)
@@ -244,9 +247,12 @@ func (o Orderbookcollection) Limitorder(obj Order, userid string) {
 			}
 			return
 		}
-		processOrders(tx, ID, db, done, partial, userid, partialQuantityProcessed, symbol1, symbol2)
 		restOrder := orderBook.Order(ID)
+		if restOrder == nil {
+			processOrders(tx, ID, db, done, partial, decimal.NewFromFloat(0), userid, partialQuantityProcessed, symbol1, symbol2)
+		}
 		if restOrder != nil {
+			processOrders(tx, ID, db, done, partial, restOrder.Quantity(), userid, partialQuantityProcessed, symbol1, symbol2)
 			quant := (restOrder.Quantity())
 			price := (restOrder.Price())
 			side := (restOrder.Side()).String()
@@ -295,9 +301,12 @@ func (o Orderbookcollection) Limitorder(obj Order, userid string) {
 			}
 			return
 		}
-		processOrders(tx, ID, db, done, partial, userid, partialQuantityProcessed, symbol1, symbol2)
 		restOrder := orderBook.Order(ID)
+		if restOrder == nil {
+			processOrders(tx, ID, db, done, partial, decimal.NewFromFloat(0), userid, partialQuantityProcessed, symbol1, symbol2)
+		}
 		if restOrder != nil {
+			processOrders(tx, ID, db, done, partial, (restOrder.Quantity()).Mul(restOrder.Price()), userid, partialQuantityProcessed, symbol1, symbol2)
 			quant := (restOrder.Quantity())
 			price := (restOrder.Price())
 			side := (restOrder.Side()).String()
@@ -398,13 +407,15 @@ func processWalletTransaction(tx *sql.Tx, side string, db *sql.DB, user1 string,
 	}
 }
 
-func processOrders(tx *sql.Tx, orderid string, db *sql.DB, done []*ob.Order, partial *ob.Order, userid string, partialQuantityProcessed decimal.Decimal, symbol1 string, symbol2 string) {
+func processOrders(tx *sql.Tx, orderid string, db *sql.DB, done []*ob.Order, partial *ob.Order, left decimal.Decimal, userid string, partialQuantityProcessed decimal.Decimal, symbol1 string, symbol2 string) {
 	var ID string
+	var side string
 	for _, value := range done {
 		if orderid == value.ID() {
 			logg.Info("gi")
 			continue
 		}
+		side = (value.Side()).String()
 		user_id, err := db.Prepare("SELECT userid from orders WHERE orderid = ?")
 		if err != nil {
 			logg.Error(err)
@@ -445,6 +456,27 @@ func processOrders(tx *sql.Tx, orderid string, db *sql.DB, done []*ob.Order, par
 		}
 	}
 	if partial != nil {
+		if (partial.Side()).String() != side {
+
+			if side == "sell" {
+				query := fmt.Sprintf("UPDATE %s  SET AvailableBalance = AvailableBalance + ? WHERE userid = ?", ("wallet" + symbol2))
+				_, err := tx.Exec(query, left, userid)
+				if err != nil {
+					logg.Error(err)
+				}
+			} else {
+				query := fmt.Sprintf("UPDATE %s  SET AvailableBalance = AvailableBalance + ? WHERE userid = ?", ("wallet" + symbol1))
+				_, err := tx.Exec(query, left, userid)
+				if err != nil {
+					logg.Error(err)
+				}
+			}
+			return
+
+		}
+	}
+	if partial != nil {
+		logg.Info(partial)
 		if orderid == partial.ID() {
 			return
 		}

@@ -23,18 +23,30 @@ func (o Orderbookcollection) GetOrderbook_bySymbol(symbol string) (*ob.OrderBook
 }
 
 func validateOrder(conn *sql.DB, quantity decimal.Decimal, symbol string, userid string) error {
-	query := fmt.Sprintf("UPDATE %s  SET AvailableBalance = CASE     WHEN AvailableBalance < ? THEN AvailableBalance     ELSE AvailableBalance - ?     END WHERE userid = ?", ("wallet" + symbol))
-	results, err := conn.Exec(query, quantity, quantity, userid)
+	tx, err := conn.Begin()
 	if err != nil {
 		logg.Error(err)
 	}
+	row, _ := tx.Exec(fmt.Sprintf("SELECT * FROM %s WHERE userid = ? FOR UPDATE", "wallet"+symbol), userid)
+	if row != nil {
+		logg.Error(row)
+	}
+	query := fmt.Sprintf("UPDATE %s SET AvailableBalance = CASE WHEN AvailableBalance < ? THEN AvailableBalance ELSE AvailableBalance - ? END WHERE userid = ?", ("wallet" + symbol))
+	results, err := tx.Exec(query, quantity, quantity, userid)
+	if err != nil {
+		logg.Error(err)
+	}
+	logg.Info(err)
 	rowsAffected, err := results.RowsAffected()
 	if err != nil {
 		logg.Error(err)
 	}
 	if rowsAffected < 1 {
+		tx.Rollback()
 		return errors.New("order not possible")
 	}
+
+	tx.Commit()
 	return nil
 }
 
