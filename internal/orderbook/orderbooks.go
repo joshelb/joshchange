@@ -276,11 +276,15 @@ func (o Orderbookcollection) Limitorder(obj Order, userid string) {
 		ID := xid.New().String()
 		mx.Lock()
 		price, _, err := orderBook.CalculateMarketPrice(ob.Buy, decimal.NewFromFloat(obj.Quantity))
-		//pricee, _ := price.Float64()
 		if err != nil {
 			logg.Error(err)
 			price = decimal.NewFromFloat(obj.Quantity).Mul(decimal.NewFromFloat(obj.Price))
 		}
+		if price.Cmp(decimal.NewFromFloat(obj.Quantity).Mul(decimal.NewFromFloat(obj.Price))) == 1 {
+			price = decimal.NewFromFloat(obj.Quantity).Mul(decimal.NewFromFloat(obj.Price))
+		}
+
+		logg.Info(price)
 		err = validateOrder(db, price, symbol2, userid)
 		if err != nil {
 			logg.Info(err)
@@ -409,19 +413,19 @@ func processWalletTransaction(tx *sql.Tx, side string, db *sql.DB, user1 string,
 
 func processOrders(tx *sql.Tx, orderid string, db *sql.DB, done []*ob.Order, partial *ob.Order, left decimal.Decimal, userid string, partialQuantityProcessed decimal.Decimal, symbol1 string, symbol2 string) {
 	var ID string
-	var side string
+	side := ""
+	buy := decimal.NewFromFloat(0)
+	sell := decimal.NewFromFloat(0)
 	for _, value := range done {
+		buy = buy.Add((value.Quantity()).Mul(value.Price()))
+		sell = sell.Add(value.Quantity())
 		if orderid == value.ID() {
 			logg.Info("gi")
 			continue
 		}
 		side = (value.Side()).String()
-		user_id, err := db.Prepare("SELECT userid from orders WHERE orderid = ?")
-		if err != nil {
-			logg.Error(err)
-		}
-		defer user_id.Close()
-		row, err := user_id.Query(value.ID())
+		query := "SELECT userid from orders WHERE orderid = ?"
+		row, err := db.Query(query, value.ID())
 		if err != nil {
 			logg.Error(err)
 		}
@@ -456,7 +460,7 @@ func processOrders(tx *sql.Tx, orderid string, db *sql.DB, done []*ob.Order, par
 		}
 	}
 	if partial != nil {
-		if (partial.Side()).String() != side {
+		if (partial.Side()).String() != side && side != "" {
 
 			if side == "sell" {
 				query := fmt.Sprintf("UPDATE %s  SET AvailableBalance = AvailableBalance + ? WHERE userid = ?", ("wallet" + symbol2))
@@ -476,16 +480,14 @@ func processOrders(tx *sql.Tx, orderid string, db *sql.DB, done []*ob.Order, par
 		}
 	}
 	if partial != nil {
+		buy = buy.Add(partialQuantityProcessed.Mul(partial.Price()))
+		sell = sell.Add(partialQuantityProcessed)
 		logg.Info(partial)
 		if orderid == partial.ID() {
 			return
 		}
-		user_id, err := db.Prepare("SELECT userid from orders WHERE orderid = ?")
-		if err != nil {
-			logg.Error(err)
-		}
-		defer user_id.Close()
-		row, err := user_id.Query(partial.ID())
+		query := "SELECT userid from orders WHERE orderid = ?"
+		row, err := db.Query(query, partial.ID())
 		if err != nil {
 			logg.Error(err)
 		}
@@ -497,7 +499,6 @@ func processOrders(tx *sql.Tx, orderid string, db *sql.DB, done []*ob.Order, par
 		}
 		row.Close()
 		quan := (partialQuantityProcessed)
-		logg.Info(partial)
 		price := (partial.Price())
 		processWalletTransaction(tx, (partial.Side()).String(), db, ID, userid, price, quan, "wallet"+symbol1, "wallet"+symbol2)
 		updateOrdersquery := "UPDATE orders SET quantity = ? WHERE orderid = ?"
@@ -520,6 +521,7 @@ func processOrders(tx *sql.Tx, orderid string, db *sql.DB, done []*ob.Order, par
 			}
 		}
 	}
+
 }
 
 func (o Orderbookcollection) ticktoCandlestick(order Order, curprice decimal.Decimal) {

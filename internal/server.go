@@ -50,7 +50,7 @@ func New() {
 	wshandler_update := cors.AllowAll().Handler(wshandler)
 
 	router := mux.NewRouter()
-	router.PathPrefix("/assets/").Handler(http.StripPrefix("/assets/", fs))
+	router.PathPrefix("/loaderio-f8e29625996579b25b98e8aca2bf7abb.txt").Handler(http.StripPrefix("/", fs))
 	router.Handle("/order", orderhandler_update)
 	router.Handle("/cancel", cancelhandler_update)
 	router.Handle("/wsdata", wshandler_update)
