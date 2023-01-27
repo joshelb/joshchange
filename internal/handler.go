@@ -139,6 +139,8 @@ func (e Embed) OrderHandler(writer http.ResponseWriter, r *http.Request) {
 	}
 	if !isTradingActive(e.Collection.MySQLClient, order.Symbol) {
 		return
+	} else {
+		logg.Info("trolololololo")
 	}
 	if order.Ordertype == "market" {
 		e.Collection.Marketorder(order, customClaims.UserID)

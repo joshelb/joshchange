@@ -52,7 +52,7 @@ func (c *Connection) pairDataHandler(mt int, msg WSStream, ch <-chan bool, e Emb
 				if err != nil {
 					logg.Error(err)
 				}
-				query := fmt.Sprintf("SELECT * FROM %s WHERE FROM_UNIXTIME(timestamp) >= NOW() - INTERVAL 1 DAY", name)
+				query := fmt.Sprintf("SELECT * FROM %s WHERE FROM_UNIXTIME(timestamp) >= NOW() - INTERVAL 1 DAY ", name)
 				query2 := fmt.Sprintf("SELECT * FROM %s WHERE FROM_UNIXTIME(timestamp) >= NOW() - INTERVAL 7 DAY", name)
 				resp, err := db.Query(query)
 				if err != nil {
@@ -64,15 +64,27 @@ func (c *Connection) pairDataHandler(mt int, msg WSStream, ch <-chan bool, e Emb
 				}
 				var quantity float64
 				var placeholder string
+				var price float64
+				var timestamp float64
 				sum := float64(0)
 				sum2 := float64(0)
+				first := []float64{1000000000000, 0}
+				last := []float64{0, 0}
 				for resp.Next() {
-					err = resp.Scan(&placeholder, &placeholder, &placeholder, &quantity, &placeholder, &placeholder)
+					err = resp.Scan(&placeholder, &placeholder, &placeholder, &quantity, &price, &timestamp)
 					if err != nil {
 						logg.Error(err)
 					}
+					if timestamp < first[0] {
+						first = []float64{timestamp, price}
+					}
+					if timestamp > last[0] {
+						last = []float64{timestamp, price}
+					}
 					sum += quantity
 				}
+				onedaychange := last[1] - first[1]
+				onedaychangeinpercent := last[1]/first[1] - 1
 				for resp2.Next() {
 					err = resp2.Scan(&placeholder, &placeholder, &placeholder, &quantity, &placeholder, &placeholder)
 					if err != nil {
@@ -82,7 +94,7 @@ func (c *Connection) pairDataHandler(mt int, msg WSStream, ch <-chan bool, e Emb
 				}
 				resp.Close()
 				resp2.Close()
-				m[name] = []float64{sum, sum2}
+				m[name] = []float64{sum, sum2, onedaychange, onedaychangeinpercent, first[1]}
 			}
 			names.Close()
 			data := &Response{Stream: "pairData", Data: m}
@@ -118,7 +130,7 @@ func (c *Connection) tradesHandler(mt int, msg WSStream, ch <-chan bool, e Embed
 			return
 		default:
 			symbols := strings.Split(msg.Symbol, ":")
-			query := fmt.Sprintf("SELECT * FROM tradeHistory%s LIMIT 100", symbols[0]+"_"+symbols[1])
+			query := fmt.Sprintf("SELECT * FROM tradeHistory%s ORDER BY timestamp DESC LIMIT 100", symbols[0]+"_"+symbols[1])
 			resp, err := db.Query(query)
 			if err != nil {
 				logg.Error(err)

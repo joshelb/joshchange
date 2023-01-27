@@ -122,22 +122,28 @@ func (o Orderbookcollection) Marketorder(obj Order, userid string) {
 	}
 	if obj.Side == "sell" {
 		curPrice, err := orderBook.CalculatePriceAfterExecution(ob.Sell, decimal.NewFromFloat(obj.Quantity))
+		logg.Info(curPrice)
+		if curPrice.Cmp(decimal.NewFromFloat(0)) == 0 {
+			return
+		}
 		if err != nil {
 			logg.Error(err)
 		}
-		mx.Lock()
-		err = validateOrder(db, decimal.NewFromFloat(obj.Quantity), symbol1, userid)
+		price, _, err := orderBook.CalculateMarketPrice(ob.Sell, decimal.NewFromFloat(obj.Quantity))
+		if err != nil {
+			logg.Error(err)
+		}
+		err = validateOrder(db, price.Div(curPrice), symbol1, userid)
 		if err != nil {
 			tx.Rollback()
-			mx.Unlock()
 			return
 		}
 		done, partial, partialQuantityProcessed, quantityLeft, err := orderBook.ProcessMarketOrder(ob.Sell, decimal.NewFromFloat(obj.Quantity))
 		if err != nil {
 			logg.Error(err)
+			tx.Rollback()
 			return
 		}
-		mx.Unlock()
 		logg.Info(partial)
 		logg.Info(done)
 		if done == nil && partial == nil {
@@ -169,7 +175,6 @@ func (o Orderbookcollection) Marketorder(obj Order, userid string) {
 		if err != nil {
 			logg.Error(err)
 		}
-		mx.Lock()
 		price, _, err := orderBook.CalculateMarketPrice(ob.Buy, decimal.NewFromFloat(obj.Quantity))
 		if err != nil {
 			logg.Error(err)
@@ -177,15 +182,14 @@ func (o Orderbookcollection) Marketorder(obj Order, userid string) {
 		err = validateOrder(db, price, symbol2, userid)
 		if err != nil {
 			tx.Rollback()
-			mx.Unlock()
 			return
 		}
 		done, partial, partialQuantityProcessed, quantityLeft, err := orderBook.ProcessMarketOrder(ob.Buy, decimal.NewFromFloat(obj.Quantity))
 		if err != nil {
 			logg.Error(err)
+			tx.Rollback()
 			return
 		}
-		mx.Unlock()
 		if done == nil && partial == nil {
 			logg.Error("deosnt work brah")
 			return
@@ -225,20 +229,20 @@ func (o Orderbookcollection) Limitorder(obj Order, userid string) {
 			logg.Error(err)
 		}
 		ID := xid.New().String()
-		mx.Lock()
+		logg.Info("Iam Here")
 		err = validateOrder(db, decimal.NewFromFloat(obj.Quantity), symbol1, userid)
 		if err != nil {
 			logg.Error(err)
 			tx.Rollback()
-			mx.Unlock()
 			return
 		}
 		done, partial, partialQuantityProcessed, err := orderBook.ProcessLimitOrder(ob.Sell, ID, decimal.NewFromFloat(obj.Quantity), decimal.NewFromFloat(obj.Price))
 		if err != nil {
 			logg.Error(err)
+			tx.Rollback()
+			return
 		}
 
-		mx.Unlock()
 		if done == nil && partial == nil {
 			insertOrders(tx, db, "sell", decimal.NewFromFloat(obj.Quantity), decimal.NewFromFloat(obj.Price), userid, ID)
 			err = tx.Commit()
@@ -274,7 +278,6 @@ func (o Orderbookcollection) Limitorder(obj Order, userid string) {
 			logg.Error(err)
 		}
 		ID := xid.New().String()
-		mx.Lock()
 		price, _, err := orderBook.CalculateMarketPrice(ob.Buy, decimal.NewFromFloat(obj.Quantity))
 		if err != nil {
 			logg.Error(err)
@@ -289,14 +292,14 @@ func (o Orderbookcollection) Limitorder(obj Order, userid string) {
 		if err != nil {
 			logg.Info(err)
 			tx.Rollback()
-			mx.Unlock()
 			return
 		}
 		done, partial, partialQuantityProcessed, err := orderBook.ProcessLimitOrder(ob.Buy, ID, decimal.NewFromFloat(obj.Quantity), decimal.NewFromFloat(obj.Price))
 		if err != nil {
 			logg.Error(err)
+			tx.Rollback()
+			return
 		}
-		mx.Unlock()
 		if done == nil && partial == nil {
 			insertOrders(tx, db, "buy", decimal.NewFromFloat(obj.Quantity), decimal.NewFromFloat(obj.Price), userid, ID)
 			err = tx.Commit()
